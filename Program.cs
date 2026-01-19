@@ -10,6 +10,8 @@ public static class Global
     public static int port = 6969;
     public static string address = "127.0.0.1";
     public static TimeSpan BAN_LIMIT = TimeSpan.FromMinutes(10);
+    public static TimeSpan MESSAGE_RATE = TimeSpan.FromSeconds(1);
+    public static int STRIKE_LIMIT = 10;
 }
 
 public class Sensitive<T>
@@ -29,12 +31,25 @@ public static class SensetiveExtensions
 public abstract record Message
 {
     public record ClientConnected(TcpClient client) : Message;
-    public record ClientDisconnected(TcpClient client) : Message;
-    public record NewMessage(TcpClient author, Byte[] Data) : Message;
+    public record ClientDisconnected(string author_addr) : Message;
+    public record NewMessage(string author_addr, Byte[] Data) : Message;
 }
 
 public class Program
 {
+
+    public static bool isValidAscii(byte[] bytes)
+    {
+        try
+        {
+            Encoding.ASCII.GetString(bytes);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     public static void handle_client(TcpClient client, ChannelWriter<Message> messages)
     {
@@ -42,26 +57,40 @@ public class Program
         {
             Console.WriteLine("Error: could not write message to user");
         }
-        // var msg = Encoding.ASCII.GetBytes("Hallo meine Freunde!\n");
-        // stream.Write(msg, 0, msg.Length);
+
+        var author_addr = client.Client.RemoteEndPoint!.ToString();
+        if (author_addr == null)
+        {
+            Console.WriteLine("Error: could not resolve client address");
+            return;
+        }
         Byte[] buff = new Byte[64];
+
         for (; ; )
         {
+
+            if (!client.Connected) break;
             try
             {
                 int n = client.GetStream().Read(buff);
-                if (n == 0)
+                if (n > 0)
                 {
-                    messages.TryWrite(new Message.ClientDisconnected(client));
+
+                    if (!messages.TryWrite(new Message.NewMessage(author_addr, buff[..n])))
+                    {
+                        Console.WriteLine("Error: could not write message to the server thread");
+                    }
+                }
+                else
+                {
+                    if (!messages.TryWrite(new Message.ClientDisconnected(author_addr)))
+                    {
+                        Console.WriteLine($"Error: could not send disconnected msg {author_addr}");
+                    }
                     break;
+
                 }
 
-                var rawMsg = Encoding.UTF8.GetString(buff[..n]);
-                Console.WriteLine($"INFO: Raw '{rawMsg}'");
-                if (!messages.TryWrite(new Message.NewMessage(client, buff[..n])))
-                {
-                    Console.WriteLine("Error: could not write message to user");
-                }
             }
             catch (OperationCanceledException)
             {
@@ -69,11 +98,19 @@ public class Program
             }
             catch (IOException ex) when (ex.InnerException is SocketException sx)
             {
-                Console.WriteLine($"Network Error: {sx.SocketErrorCode.AsSensitive()}");
+                if (sx.SocketErrorCode == SocketError.ConnectionAborted)
+                {
+                    Console.WriteLine($"INFO: Connection closed for {author_addr} (likely banned)");
+                }
+                else
+                {
+                    Console.WriteLine($"Network Error: {sx.SocketErrorCode.AsSensitive()}");
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Unexpected error: {ex.AsSensitive()}");
+                break;
             }
         }
     }
@@ -95,46 +132,126 @@ public class Program
                             var now = DateTime.UtcNow;
                             if (banned.Remove(author_addr!, out DateTime banned_at))
                             {
-                                var duration = now - banned_at;
+                                var diff = now - banned_at;
 
-                                if (duration >= Global.BAN_LIMIT)
+                                if (diff >= Global.BAN_LIMIT)
                                 {
                                     banned.Remove(author_addr!);
                                 }
                                 else
                                 {
-                                    var timeLeft = Global.BAN_LIMIT - duration;
+                                    var timeLeft = Global.BAN_LIMIT - diff;
+                                    Console.WriteLine($"INFO: Client {author_addr} tried to connect while being banned for {timeLeft.TotalSeconds:F0} more secs");
                                     string ban_msg = $"You are banned MF: {timeLeft.TotalSeconds:F0} secs left\n";
-
-                                    author.GetStream().Write(Encoding.ASCII.GetBytes(ban_msg));
-                                    author.Close();
-                                    return;
+                                    try
+                                    {
+                                        author.GetStream().Write(Encoding.ASCII.GetBytes(ban_msg));
+                                        banned.Add(author_addr, now);
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        Console.WriteLine($"Error: could not send ban msg: {e}");
+                                    }
+                                    finally
+                                    {
+                                        author.Close();
+                                    }
+                                    break;
                                 }
                             }
 
-                            clients.Add(author_addr!, new Client(author, now, 0));
+                            clients[author_addr] = new Client(author, now, 0);
+                            Console.WriteLine($"INFO: Client {author_addr} connected");
                             break;
                         }
-                    case Message.ClientDisconnected(var author):
+                    case Message.ClientDisconnected(var author_addr):
                         {
-                            var addr = author.Client.RemoteEndPoint!.ToString();
-                            clients.Remove(addr!);
+                            Console.WriteLine($"INFO: Cient {author_addr} disconnected");
+                            clients.Remove(author_addr!);
                             break;
                         }
-                    case Message.NewMessage(var author, var bytes):
+                    case Message.NewMessage(var author_addr, var bytes):
                         {
-                            if (Encoding.ASCII.GetString(bytes).Trim() == "") break;
-                            var author_addr = author.Client.RemoteEndPoint!.ToString();
-                            clients.TryGetValue(author_addr!, out var clinet);
-                            var now = DateTime.UtcNow;
-
-                            foreach (var (addr, client) in clients)
+                            var text = Encoding.ASCII.GetString(bytes);
+                            if (clients.TryGetValue(author_addr!, out var author))
                             {
-                                if (addr != author_addr)
-                                {
-                                    client.conn.GetStream().Write(bytes);
-                                }
+                                var now = DateTime.UtcNow;
+                                var diff = now - author.last_messsage;
 
+                                if (diff >= Global.MESSAGE_RATE)
+                                {
+                                    if (isValidAscii(bytes) && !string.IsNullOrWhiteSpace(text))
+                                    {
+
+                                        Console.WriteLine($"INFO: Client {author_addr} sent message: [{string.Join(", ", bytes)}]");
+
+                                        foreach (var (addr, client) in clients)
+                                        {
+                                            if (addr != author_addr)
+                                            {
+                                                try
+                                                {
+
+                                                    client.conn.GetStream().Write(bytes);
+                                                }
+                                                catch (Exception e)
+                                                {
+                                                    Console.WriteLine($"Error: could not broadcast message to all the clients from {author_addr}: {e}");
+                                                }
+                                            }
+
+                                        }
+                                    }
+                                    else
+                                    {
+                                        author.strike_count += 1;
+                                        if (author.strike_count >= Global.STRIKE_LIMIT)
+                                        {
+                                            Console.WriteLine($"INFO: Client {author_addr} got banned");
+                                            banned[author_addr] = now;
+                                            var ban_msg = Encoding.ASCII.GetBytes("You are banned MF\n");
+                                            try
+                                            {
+
+                                                author.conn.GetStream().Write(ban_msg);
+                                            }
+                                            catch (Exception e)
+                                            {
+                                                Console.WriteLine($"Error: could not send banned msg to {author_addr}: {e}");
+                                            }
+                                            finally
+                                            {
+                                                clients.Remove(author_addr);
+                                                author.conn.Close();
+                                            }
+                                        }
+
+                                    }
+                                }
+                                else
+                                {
+                                    author.strike_count += 1;
+                                    if (author.strike_count >= Global.STRIKE_LIMIT)
+                                    {
+                                        Console.WriteLine($"INFO: Client {author_addr} got banned");
+                                        banned[author_addr] = now;
+                                        var ban_msg = Encoding.ASCII.GetBytes("You are banned MF\n");
+                                        try
+                                        {
+
+                                            author.conn.GetStream().Write(ban_msg);
+                                        }
+                                        catch (Exception e)
+                                        {
+                                            Console.WriteLine($"Error: could not send banned msg to {author_addr}: {e}");
+                                        }
+                                        finally
+                                        {
+                                            clients.Remove(author_addr);
+                                            author.conn.Close();
+                                        }
+                                    }
+                                }
                             }
                             break;
                         }
@@ -166,7 +283,6 @@ public class Program
 
                 TcpClient client = listener.AcceptTcpClient();
 
-                Console.WriteLine($"client connected");
                 Thread t = new Thread(() => handle_client(client, message_sender));
                 t.Start();
             }
