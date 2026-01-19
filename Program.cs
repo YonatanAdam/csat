@@ -2,12 +2,14 @@
 using System.Net;
 using System.Threading.Channels;
 using _4at;
+using System.Text;
 
 public static class Global
 {
     public static bool SAFE_MODE = false;
     public static int port = 6969;
     public static string address = "127.0.0.1";
+    public static TimeSpan BAN_LIMIT = TimeSpan.FromMinutes(10);
 }
 
 public class Sensitive<T>
@@ -54,6 +56,8 @@ public class Program
                     break;
                 }
 
+                var rawMsg = Encoding.UTF8.GetString(buff[..n]);
+                Console.WriteLine($"INFO: Raw '{rawMsg}'");
                 if (!messages.TryWrite(new Message.NewMessage(client, buff[..n])))
                 {
                     Console.WriteLine("Error: could not write message to user");
@@ -77,6 +81,7 @@ public class Program
     public static async Task server(ChannelReader<Message> messages)
     {
         var clients = new Dictionary<string, Client>();
+        var banned = new Dictionary<string, DateTime>();
 
         for (; ; )
         {
@@ -86,8 +91,28 @@ public class Program
                 {
                     case Message.ClientConnected(var author):
                         {
-                            var addr = author.Client.RemoteEndPoint!.ToString();
-                            clients.Add(addr!, new Client(author));
+                            var author_addr = author.Client.RemoteEndPoint!.ToString();
+                            var now = DateTime.UtcNow;
+                            if (banned.Remove(author_addr!, out DateTime banned_at))
+                            {
+                                var duration = now - banned_at;
+
+                                if (duration >= Global.BAN_LIMIT)
+                                {
+                                    banned.Remove(author_addr!);
+                                }
+                                else
+                                {
+                                    var timeLeft = Global.BAN_LIMIT - duration;
+                                    string ban_msg = $"You are banned MF: {timeLeft.TotalSeconds:F0} secs left\n";
+
+                                    author.GetStream().Write(Encoding.ASCII.GetBytes(ban_msg));
+                                    author.Close();
+                                    return;
+                                }
+                            }
+
+                            clients.Add(author_addr!, new Client(author, now, 0));
                             break;
                         }
                     case Message.ClientDisconnected(var author):
@@ -98,7 +123,11 @@ public class Program
                         }
                     case Message.NewMessage(var author, var bytes):
                         {
+                            if (Encoding.ASCII.GetString(bytes).Trim() == "") break;
                             var author_addr = author.Client.RemoteEndPoint!.ToString();
+                            clients.TryGetValue(author_addr!, out var clinet);
+                            var now = DateTime.UtcNow;
+
                             foreach (var (addr, client) in clients)
                             {
                                 if (addr != author_addr)
