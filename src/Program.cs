@@ -207,10 +207,10 @@ public class Program
 
                                         author.last_message = now;
 
-                                        Console.WriteLine($"INFO: Client {author_addr} sent message: [{string.Join(", ", bytes)}]");
 
                                         if (author.authenticated)
                                         {
+                                            Console.WriteLine($"INFO: Client {author_addr} sent message: [{string.Join(", ", bytes)}]");
                                             foreach (var (addr, client) in clients)
                                             {
                                                 if (addr != author_addr && client.authenticated)
@@ -248,6 +248,7 @@ public class Program
                                             {
                                                 try
                                                 {
+                                                    Console.WriteLine($"INFO: {author_addr.AsSensitive()} failed authentication!");
                                                     stream.Write(Encoding.UTF8.GetBytes("Invalid Token!\n"));
                                                 }
                                                 catch (Exception e)
