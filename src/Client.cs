@@ -1,17 +1,17 @@
-﻿namespace _4at;
+﻿namespace csat;
 
 using System.Net.Sockets;
 
 public class Client
 {
     public TcpClient conn;
-    public DateTime last_messsage;
+    public DateTime last_message;
     public int strike_count;
 
     public Client(TcpClient other, DateTime last_messsage, int strike_count)
     {
         this.conn = other;
-        this.last_messsage = last_messsage;
+        this.last_message = last_messsage;
         this.strike_count = strike_count;
     }
 }

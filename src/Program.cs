@@ -1,8 +1,9 @@
 ﻿using System.Net.Sockets;
 using System.Net;
 using System.Threading.Channels;
-using _4at;
+using csat;
 using System.Text;
+using System.Text.Unicode;
 
 public static class Global
 {
@@ -33,32 +34,135 @@ public abstract record Message
     public record ClientConnected(TcpClient client) : Message;
     public record ClientDisconnected(string author_addr) : Message;
     public record NewMessage(string author_addr, Byte[] Data) : Message;
+    // public record Ban(string ip) : Message;
 }
 
 public class Program
 {
 
-    public static bool isValidAscii(byte[] bytes)
+    public static bool isValidUTF8(byte[] bytes) => Utf8.IsValid(bytes);
+
+
+    public static bool ContainsEscapeSequences(string text)
     {
-        try
+        foreach (char c in text)
         {
-            Encoding.ASCII.GetString(bytes);
-            return true;
+            if (c < 0x20 && c != '\t' && c != '\n' && c != '\r')
+            {
+                return true;
+            }
+            if (c == 0x7F)
+            {
+                return true;
+            }
         }
-        catch
-        {
-            return false;
-        }
+        return false;
     }
 
-    public static void handle_client(TcpClient client, ChannelWriter<Message> messages)
+    public static bool authenticate(TcpClient client, string addr, string token)
     {
+        var buffer = new byte[32];
+        var s = client.GetStream();
+        int n = 0;
+        try
+        {
+            n = s.Read(buffer);
+        }
+        catch (EndOfStreamException)
+        {
+            Console.WriteLine("Error: client disconnected before sending full token");
+            client.Close();
+            return false;
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Error: Could not read authentication token from from {addr.AsSensitive()}: {e.AsSensitive()}");
+            client.Close();
+            return false;
+        }
+
+        if (n < buffer.Length)
+        {
+            Console.WriteLine($"Error: didn't fully read authentication token: only {n} bytes");
+            try
+            {
+                s.Write(Encoding.UTF8.GetBytes("Invalid Token!\n"));
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"Error: could not notify client {addr.AsSensitive()} about invalid token: {e.AsSensitive()}");
+            }
+            client.Close();
+            return false;
+        }
+
+        if (!isValidUTF8(buffer))
+        {
+            Console.WriteLine($"Error: token is not valid UTF8");
+            try
+            {
+                s.Write(Encoding.UTF8.GetBytes("Invalid Token!\n"));
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"Error: could not notify client {addr.AsSensitive()} about invalid token: {e.AsSensitive()}");
+            }
+            client.Close();
+            return false;
+        }
+
+        string user_token = Encoding.UTF8.GetString(buffer);
+
+        if (user_token != token)
+        {
+            Console.WriteLine($"INFO: Client {addr} provided wrong token");
+            try
+            {
+                s.Write(Encoding.UTF8.GetBytes("Invalid Token!\n"));
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"Error: could not notify client {addr.AsSensitive()} about invalid token: {e.AsSensitive()}");
+            }
+            client.Close();
+            return false;
+        }
+
+        return true;
+    }
+
+    public static void handle_client(TcpClient client, ChannelWriter<Message> messages, string token)
+    {
+        var author_addr = client.Client.RemoteEndPoint!.ToString();
+        var stream = client.GetStream();
+
+        try
+        {
+
+            stream.Write(Encoding.UTF8.GetBytes("Token: "));
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Error: could not sent token prompt to {author_addr.AsSensitive()}: {e.AsSensitive()}");
+        }
+
+        if (!authenticate(client, author_addr!, token)) return;
+
+        try
+        {
+            stream.Write(Encoding.UTF8.GetBytes("Welcode to the club!\n"));
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Error: Could not send welcome message to {author_addr}: {e.AsSensitive()}");
+        }
+        Console.WriteLine($"INFO: {author_addr} authenticated!");
+
         if (!messages.TryWrite(new Message.ClientConnected(client)))
         {
             Console.WriteLine("Error: could not write message to user");
         }
 
-        var author_addr = client.Client.RemoteEndPoint!.ToString();
         if (author_addr == null)
         {
             Console.WriteLine("Error: could not resolve client address");
@@ -72,7 +176,7 @@ public class Program
             if (!client.Connected) break;
             try
             {
-                int n = client.GetStream().Read(buff);
+                int n = stream.Read(buff);
                 if (n > 0)
                 {
 
@@ -145,8 +249,8 @@ public class Program
                                     string ban_msg = $"You are banned MF: {timeLeft.TotalSeconds:F0} secs left\n";
                                     try
                                     {
-                                        author.GetStream().Write(Encoding.ASCII.GetBytes(ban_msg));
-                                        banned.Add(author_addr, now);
+                                        author.GetStream().Write(Encoding.UTF8.GetBytes(ban_msg));
+                                        banned.Add(author_addr!, now);
                                     }
                                     catch (Exception e)
                                     {
@@ -160,7 +264,7 @@ public class Program
                                 }
                             }
 
-                            clients[author_addr] = new Client(author, now, 0);
+                            clients[author_addr!] = new Client(author, now, 0);
                             Console.WriteLine($"INFO: Client {author_addr} connected");
                             break;
                         }
@@ -172,16 +276,18 @@ public class Program
                         }
                     case Message.NewMessage(var author_addr, var bytes):
                         {
-                            var text = Encoding.ASCII.GetString(bytes);
+                            var text = Encoding.UTF8.GetString(bytes);
                             if (clients.TryGetValue(author_addr!, out var author))
                             {
                                 var now = DateTime.UtcNow;
-                                var diff = now - author.last_messsage;
+                                var diff = now - author.last_message;
 
                                 if (diff >= Global.MESSAGE_RATE)
                                 {
-                                    if (isValidAscii(bytes) && !string.IsNullOrWhiteSpace(text))
+                                    if (isValidUTF8(bytes) && !string.IsNullOrWhiteSpace(text) && !ContainsEscapeSequences(text))
                                     {
+
+                                        author.last_message = now;
 
                                         Console.WriteLine($"INFO: Client {author_addr} sent message: [{string.Join(", ", bytes)}]");
 
@@ -262,6 +368,12 @@ public class Program
 
     static async Task Main(string[] args)
     {
+        byte[] buffer = new byte[16];
+        var rnd = new Random();
+        rnd.NextBytes(buffer);
+        var token = Convert.ToHexString(buffer);
+        Console.WriteLine($"Token: {token}");
+
         TcpListener? listener = null;
         try
         {
@@ -269,7 +381,7 @@ public class Program
             listener = new TcpListener(address, Global.port);
 
             listener.Start();
-            Console.WriteLine($"Listening on {Global.address.AsSensitive()}:{Global.port.AsSensitive()}...");
+            Console.WriteLine($"INFO: Listening on {Global.address.AsSensitive()}:{Global.port.AsSensitive()}...");
 
             var c = Channel.CreateUnbounded<Message>();
             var (message_sender, message_receiver) = (c.Writer, c.Reader);
@@ -279,11 +391,11 @@ public class Program
 
             while (true)
             {
-                Console.WriteLine("Waiting for connection...");
+                // Console.WriteLine("INFO: Waiting for connection...");
 
                 TcpClient client = listener.AcceptTcpClient();
 
-                Thread t = new Thread(() => handle_client(client, message_sender));
+                Thread t = new Thread(() => handle_client(client, message_sender, token));
                 t.Start();
             }
         }
