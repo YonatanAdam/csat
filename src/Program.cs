@@ -59,104 +59,10 @@ public class Program
         return false;
     }
 
-    public static bool authenticate(TcpClient client, string addr, string token)
-    {
-        var buffer = new byte[32];
-        var s = client.GetStream();
-        int n = 0;
-        try
-        {
-            n = s.Read(buffer);
-        }
-        catch (EndOfStreamException)
-        {
-            Console.WriteLine("Error: client disconnected before sending full token");
-            client.Close();
-            return false;
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"Error: Could not read authentication token from from {addr.AsSensitive()}: {e.AsSensitive()}");
-            client.Close();
-            return false;
-        }
-
-        if (n < buffer.Length)
-        {
-            Console.WriteLine($"Error: didn't fully read authentication token: only {n} bytes");
-            try
-            {
-                s.Write(Encoding.UTF8.GetBytes("Invalid Token!\n"));
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"Error: could not notify client {addr.AsSensitive()} about invalid token: {e.AsSensitive()}");
-            }
-            client.Close();
-            return false;
-        }
-
-        if (!isValidUTF8(buffer))
-        {
-            Console.WriteLine($"Error: token is not valid UTF8");
-            try
-            {
-                s.Write(Encoding.UTF8.GetBytes("Invalid Token!\n"));
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"Error: could not notify client {addr.AsSensitive()} about invalid token: {e.AsSensitive()}");
-            }
-            client.Close();
-            return false;
-        }
-
-        string user_token = Encoding.UTF8.GetString(buffer);
-
-        if (user_token != token)
-        {
-            Console.WriteLine($"INFO: Client {addr} provided wrong token");
-            try
-            {
-                s.Write(Encoding.UTF8.GetBytes("Invalid Token!\n"));
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"Error: could not notify client {addr.AsSensitive()} about invalid token: {e.AsSensitive()}");
-            }
-            client.Close();
-            return false;
-        }
-
-        return true;
-    }
-
-    public static void handle_client(TcpClient client, ChannelWriter<Message> messages, string token)
+    public static void handle_client(TcpClient client, ChannelWriter<Message> messages)
     {
         var author_addr = client.Client.RemoteEndPoint!.ToString();
         var stream = client.GetStream();
-
-        try
-        {
-
-            stream.Write(Encoding.UTF8.GetBytes("Token: "));
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"Error: could not sent token prompt to {author_addr.AsSensitive()}: {e.AsSensitive()}");
-        }
-
-        if (!authenticate(client, author_addr!, token)) return;
-
-        try
-        {
-            stream.Write(Encoding.UTF8.GetBytes("Welcode to the club!\n"));
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"Error: Could not send welcome message to {author_addr}: {e.AsSensitive()}");
-        }
-        Console.WriteLine($"INFO: {author_addr} authenticated!");
 
         if (!messages.TryWrite(new Message.ClientConnected(client)))
         {
@@ -219,7 +125,7 @@ public class Program
         }
     }
 
-    public static async Task server(ChannelReader<Message> messages)
+    public static async Task server(ChannelReader<Message> messages, string token)
     {
         var clients = new Dictionary<string, Client>();
         var banned = new Dictionary<string, DateTime>();
@@ -234,6 +140,7 @@ public class Program
                         {
                             var author_addr = author.Client.RemoteEndPoint!.ToString();
                             var now = DateTime.UtcNow;
+                            var stream = author.GetStream();
                             if (banned.Remove(author_addr!, out DateTime banned_at))
                             {
                                 var diff = now - banned_at;
@@ -264,8 +171,18 @@ public class Program
                                 }
                             }
 
-                            clients[author_addr!] = new Client(author, now, 0);
                             Console.WriteLine($"INFO: Client {author_addr} connected");
+                            clients[author_addr!] = new Client(author, now, 0, false);
+
+                            try
+                            {
+
+                                stream.Write(Encoding.UTF8.GetBytes("Token: "));
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine($"Error: could not sent token prompt to {author_addr.AsSensitive()}: {e.AsSensitive()}");
+                            }
                             break;
                         }
                     case Message.ClientDisconnected(var author_addr):
@@ -279,6 +196,7 @@ public class Program
                             var text = Encoding.UTF8.GetString(bytes);
                             if (clients.TryGetValue(author_addr!, out var author))
                             {
+                                var stream = author.conn.GetStream();
                                 var now = DateTime.UtcNow;
                                 var diff = now - author.last_message;
 
@@ -291,21 +209,54 @@ public class Program
 
                                         Console.WriteLine($"INFO: Client {author_addr} sent message: [{string.Join(", ", bytes)}]");
 
-                                        foreach (var (addr, client) in clients)
+                                        if (author.authenticated)
                                         {
-                                            if (addr != author_addr)
+                                            foreach (var (addr, client) in clients)
                                             {
+                                                if (addr != author_addr && client.authenticated)
+                                                {
+                                                    try
+                                                    {
+
+                                                        client.conn.GetStream().Write(bytes);
+                                                    }
+                                                    catch (Exception e)
+                                                    {
+                                                        Console.WriteLine($"Error: could not broadcast message to all the clients from {author_addr}: {e}");
+                                                    }
+                                                }
+
+                                            }
+                                        }
+                                        else
+                                        {
+                                            if (text.TrimEnd() == token)
+                                            {
+                                                author.authenticated = true;
                                                 try
                                                 {
-
-                                                    client.conn.GetStream().Write(bytes);
+                                                    stream.Write(Encoding.UTF8.GetBytes("Welcode to the club!\n"));
                                                 }
                                                 catch (Exception e)
                                                 {
-                                                    Console.WriteLine($"Error: could not broadcast message to all the clients from {author_addr}: {e}");
+                                                    Console.WriteLine($"Error: Could not send welcome message to {author_addr}: {e.AsSensitive()}");
                                                 }
-                                            }
+                                                Console.WriteLine($"INFO: {author_addr} authenticated!");
 
+                                            }
+                                            else
+                                            {
+                                                try
+                                                {
+                                                    stream.Write(Encoding.UTF8.GetBytes("Invalid Token!\n"));
+                                                }
+                                                catch (Exception e)
+                                                {
+                                                    Console.WriteLine($"Error: could not notify client {author_addr.AsSensitive()} about invalid token: {e.AsSensitive()}");
+                                                }
+                                                author.conn.Close();
+                                                clients.Remove(author_addr);
+                                            }
                                         }
                                     }
                                     else
@@ -386,16 +337,14 @@ public class Program
             var c = Channel.CreateUnbounded<Message>();
             var (message_sender, message_receiver) = (c.Writer, c.Reader);
 
-            Thread server_thread = new Thread(async () => await server(message_receiver));
+            Thread server_thread = new Thread(async () => await server(message_receiver, token));
             server_thread.Start();
 
             while (true)
             {
-                // Console.WriteLine("INFO: Waiting for connection...");
-
                 TcpClient client = listener.AcceptTcpClient();
 
-                Thread t = new Thread(() => handle_client(client, message_sender, token));
+                Thread t = new Thread(() => handle_client(client, message_sender));
                 t.Start();
             }
         }
