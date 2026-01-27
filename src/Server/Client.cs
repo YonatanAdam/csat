@@ -1,4 +1,4 @@
-﻿namespace csat;
+namespace csat;
 
 using System.Net.Sockets;
 

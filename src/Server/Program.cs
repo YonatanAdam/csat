@@ -8,7 +8,7 @@ using System.Text.Unicode;
 public static class Global
 {
     public static bool SAFE_MODE = false;
-    public static int port = 6969;
+    public static int port = 4293;
     public static string address = "127.0.0.1";
     public static TimeSpan BAN_LIMIT = TimeSpan.FromMinutes(10);
     public static TimeSpan MESSAGE_RATE = TimeSpan.FromSeconds(1);
@@ -235,7 +235,7 @@ public class Program
                                                 author.authenticated = true;
                                                 try
                                                 {
-                                                    stream.Write(Encoding.UTF8.GetBytes("Welcode to the club!\n"));
+                                                    stream.Write(Encoding.UTF8.GetBytes("Welcome to the club!\n"));
                                                 }
                                                 catch (Exception e)
                                                 {
@@ -368,3 +368,4 @@ public class Program
 
     }
 }
+
