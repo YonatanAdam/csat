@@ -1,6 +1,5 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Data;
 using System.Net.Sockets;
 using System.Text;
 using System.Windows;
@@ -19,10 +18,6 @@ public partial class MainWindow : Window
     private int history_index = -1;
 
     private string[] commands = ["connect", "disconnect", "help", "clear", "exit"];
-    private static List<int> l1 = [1, 2, 3, 4];
-    private static List<int> l2 = [5, 6, 7, 8];
-
-    private List<int> d = [..l1, ..l2];
 
     public MainWindow()
     {
@@ -41,17 +36,6 @@ public partial class MainWindow : Window
         };
     }
 
-    private bool isCommand(string text)
-    {
-        if (text.StartsWith('/'))
-        {
-            var comands = text[1..].Split(' ');
-            if (commands.Contains(comands[0])) return true;
-        }
-
-        return false;
-    }
-
     private async void SendButton_OnClick(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(TextPrompt.Text)) return;
@@ -64,7 +48,7 @@ public partial class MainWindow : Window
 
         TextPrompt.Clear();
 
-        if (isCommand(messageText))
+        if (messageText.StartsWith('/')) // or should I use isCommand...
         {
             HandleCommand(messageText);
         }
@@ -240,7 +224,6 @@ public partial class MainWindow : Window
                 {
                     HandleDisconnect();
                     Application.Current.Shutdown();
-
                 }
                 break;
 
