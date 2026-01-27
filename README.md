@@ -1,20 +1,20 @@
-# CSAT
+# Csat
 
 ## TCP chat client (bad)
 
 ### Usage:
 
 Server:
+
 ```console
-$ dotnet run
+$ dotnet run --project Server
 ```
 
 Clients:
-```console
-$ telnet 127.0.0.1 6969
-# OR
-$ nc 127.0.0.1 6969
 
-# Stress test / bann system
-$ yes | nc -s 127.0.0.1 -p <port> 127.0.0.1 6969
+```console
+$ dotnet run --project Client
+
+# Stress test / Ban system
+$ yes | nc -s 127.0.0.1 -p <port> 127.0.0.1 4293
 ```
