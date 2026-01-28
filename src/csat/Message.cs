@@ -4,12 +4,13 @@ public class Message
 {
     public Guid Id { get; set; }
     public string Text { get; set; }
+    public string Username { get; set; }
     public DateTime Timestamp { get; set; }
 
-    public Message(string message)
+    public Message(string text, string username = "", DateTime? timestamp = null)
     {
-        Id = Guid.NewGuid();
-        Text = message;
-        Timestamp = DateTime.Now;
+        Text = text;
+        Username = username;
+        Timestamp = timestamp ?? DateTime.Now;
     }
 }

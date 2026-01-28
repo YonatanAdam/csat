@@ -8,12 +8,14 @@ public class Client
     public DateTime last_message;
     public int strike_count;
     public bool authenticated;
+    public string? username = "";
 
-    public Client(TcpClient other, DateTime last_messsage, int strike_count, bool authed)
+    public Client(TcpClient other, DateTime last_messsage, int strike_count, bool authed, string? username = null)
     {
         this.conn = other;
         this.last_message = last_messsage;
         this.strike_count = strike_count;
         this.authenticated = authed;
+        this.username = username;
     }
 }

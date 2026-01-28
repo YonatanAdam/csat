@@ -107,12 +107,13 @@
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <Border Style="{StaticResource ChatBubble}">
-                        <TextBlock
-                            Text="{Binding Text}"
-                            TextWrapping="Wrap"
-                            Foreground="{StaticResource TextBrush}"
-                            FontSize="18"
-                            IsHitTestVisible="False"/>
+                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextBrush}" IsHitTestVisible="False">
+                            <Run Text="{Binding Timestamp, StringFormat='[{0:HH:mm}]', Mode=OneWay}" FontSize="14" Foreground="DimGray"/>
+                            <Run Text=" "/>
+                            <Run Text="{Binding Username, Mode=OneWay}" FontSize="16" FontWeight="SemiBold"/>
+                            <Run Text=": "/>
+                            <Run Text="{Binding Text, Mode=OneWay}" FontSize="16"/>
+                        </TextBlock>
                     </Border>
                 </DataTemplate>
             </ListView.ItemTemplate>
@@ -128,17 +129,21 @@
 
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                
+                <Ellipse x:Name="ConnectionLight" VerticalAlignment="Center" HorizontalAlignment="Center" Width="15" Height="15" Fill="Red" Margin="0,0, 5,0"/>
 
-                <TextBox Grid.Column="0"
+
+                <TextBox Grid.Column="1"
                          x:Name="TextPrompt"
                          Height="40"
                          VerticalContentAlignment="Center"
-                         KeyDown="TextPrompt_OnKeyDown"/>
+                         PreviewKeyDown="TextPrompt_OnPreviewKeyDown"/>
 
-                <Button Grid.Column="1"
+                <Button Grid.Column="2"
                         Content="Send"
                         Margin="6,0,0,0"
                         Height="40"
