@@ -13,7 +13,7 @@ $ dotnet run --project Server
 Clients:
 
 ```console
-$ dotnet run --project Client
+$ dotnet run --project csat
 
 # Stress test / Ban system
 $ yes | nc -s 127.0.0.1 -p <port> 127.0.0.1 4293
