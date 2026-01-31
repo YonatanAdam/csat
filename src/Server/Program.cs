@@ -24,7 +24,7 @@ public class Sensitive<T>
     public override string ToString() => Global.SAFE_MODE ? "[REDACTED]" : $"{this.Inner}";
 }
 
-public static class SensetiveExtensions
+public static class SensitiveExtensions
 {
     public static Sensitive<T> AsSensitive<T>(this T value) => new Sensitive<T>(value);
 }
@@ -58,63 +58,50 @@ public class Program
         return false;
     }
 
-    public static void handle_client(TcpClient client, ChannelWriter<Message> messages)
+    public static async Task HandleClientAsync(TcpClient client, ChannelWriter<Message> messages, CancellationToken ct = default)
     {
-        var author_addr = client.Client.RemoteEndPoint!.ToString();
-        var stream = client.GetStream();
-
-        if (!messages.TryWrite(new Message.ClientConnected(client)))
-        {
-            Console.WriteLine("Error: could not write message to user");
-        }
-
+        var author_addr = client.Client.RemoteEndPoint?.ToString();
         if (author_addr == null)
         {
             Console.WriteLine("Error: could not resolve client address");
             return;
         }
+
+        var stream = client.GetStream();
+        
+        await messages.WriteAsync(new Message.ClientConnected(client), ct);
+        
         Byte[] buff = new Byte[64];
 
-        for (; ; )
+        while (!ct.IsCancellationRequested && client.Connected)
         {
-
-            if (!client.Connected) break;
             try
             {
-                int n = stream.Read(buff);
+                var n = await stream.ReadAsync(buff, ct);
                 if (n > 0)
                 {
 
-                    if (!messages.TryWrite(new Message.NewMessage(author_addr, buff[..n])))
-                    {
-                        Console.WriteLine("Error: could not write message to the server thread");
-                    }
+                    await messages.WriteAsync(new Message.NewMessage(author_addr, buff[..n]), ct);
+
                 }
                 else
                 {
-                    if (!messages.TryWrite(new Message.ClientDisconnected(author_addr)))
-                    {
-                        Console.WriteLine($"Error: could not send disconnected msg {author_addr}");
-                    }
+                    // Client disconnected
+                    await messages.WriteAsync(new Message.ClientDisconnected(author_addr), ct);
                     break;
-
                 }
-
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("Read operation timed out or was cancelled.");
+                Console.WriteLine($"INFO: Read operation for {author_addr} canceled.");
+                break;
             }
             catch (IOException ex) when (ex.InnerException is SocketException sx)
             {
                 if (sx.SocketErrorCode == SocketError.ConnectionAborted)
-                {
                     Console.WriteLine($"INFO: Connection closed for {author_addr} (likely banned)");
-                }
                 else
-                {
                     Console.WriteLine($"Network Error: {sx.SocketErrorCode.AsSensitive()}");
-                }
             }
             catch (Exception ex)
             {
@@ -122,16 +109,16 @@ public class Program
                 break;
             }
         }
+        
+        client.Close();
     }
 
-    public static async Task server(ChannelReader<Message> messages, string token)
+    public static async Task server(ChannelReader<Message> messages, string token, CancellationToken ct = default)
     {
         var clients = new Dictionary<string, Client>();
         var banned = new Dictionary<string, DateTime>();
-
-        for (; ; )
-        {
-            await foreach (var msg in messages.ReadAllAsync())
+        
+            await foreach (var msg in messages.ReadAllAsync(ct))
             {
                 switch (msg)
                 {
@@ -155,7 +142,7 @@ public class Program
                                     string ban_msg = $"You are banned MF: {timeLeft.TotalSeconds:F0} secs left\n";
                                     try
                                     {
-                                        author.GetStream().Write(Encoding.UTF8.GetBytes(ban_msg));
+                                        await stream.WriteAsync(Encoding.UTF8.GetBytes(ban_msg), ct);
                                         banned.Add(author_addr!, now);
                                     }
                                     catch (Exception e)
@@ -171,12 +158,12 @@ public class Program
                             }
 
                             Console.WriteLine($"INFO: Client {author_addr} connected");
-                            clients[author_addr!] = new Client(author, now, 0, false);
+                            clients[author_addr] = new Client(author, now, 0, false);
 
                             try
                             {
 
-                                stream.Write(Encoding.UTF8.GetBytes("Token: "));
+                                await stream.WriteAsync(Encoding.UTF8.GetBytes("Token: "), ct);
                             }
                             catch (Exception e)
                             {
@@ -187,7 +174,7 @@ public class Program
                     case Message.ClientDisconnected(var author_addr):
                         {
                             Console.WriteLine($"INFO: Cient {author_addr} disconnected");
-                            clients.Remove(author_addr!);
+                            clients.Remove(author_addr);
                             break;
                         }
                     case Message.NewMessage(var author_addr, var bytes):
@@ -203,10 +190,8 @@ public class Program
                                 {
                                     if (isValidUTF8(bytes) && !string.IsNullOrWhiteSpace(text) && !ContainsEscapeSequences(text))
                                     {
-
                                         author.last_message = now;
-
-
+                                        
                                         if (author.authenticated)
                                         {
                                             Console.WriteLine($"INFO: Client {author_addr} sent message: [{string.Join(", ", bytes)}]");
@@ -216,8 +201,7 @@ public class Program
                                                 {
                                                     try
                                                     {
-
-                                                        client.conn.GetStream().Write(bytes);
+                                                        await client.conn.GetStream().WriteAsync(bytes, ct);
                                                     }
                                                     catch (Exception e)
                                                     {
@@ -234,7 +218,7 @@ public class Program
                                                 author.authenticated = true;
                                                 try
                                                 {
-                                                    stream.Write(Encoding.UTF8.GetBytes("Welcome to the club!\n"));
+                                                    await stream.WriteAsync(Encoding.UTF8.GetBytes("Welcome to the club!\n"), ct);
                                                 }
                                                 catch (Exception e)
                                                 {
@@ -248,7 +232,7 @@ public class Program
                                                 try
                                                 {
                                                     Console.WriteLine($"INFO: {author_addr.AsSensitive()} failed authentication!");
-                                                    stream.Write(Encoding.UTF8.GetBytes("Invalid Token!\n"));
+                                                    await stream.WriteAsync(Encoding.UTF8.GetBytes("Invalid Token!\n"), ct);
                                                 }
                                                 catch (Exception e)
                                                 {
@@ -269,8 +253,7 @@ public class Program
                                             var ban_msg = Encoding.ASCII.GetBytes("You are banned MF\n");
                                             try
                                             {
-
-                                                author.conn.GetStream().Write(ban_msg);
+                                                await author.conn.GetStream().WriteAsync(ban_msg, ct);
                                             }
                                             catch (Exception e)
                                             {
@@ -296,7 +279,7 @@ public class Program
                                         try
                                         {
 
-                                            author.conn.GetStream().Write(ban_msg);
+                                            await author.conn.GetStream().WriteAsync(ban_msg, ct);
                                         }
                                         catch (Exception e)
                                         {
@@ -313,7 +296,6 @@ public class Program
                             break;
                         }
                 }
-            }
         }
     }
 
@@ -330,23 +312,30 @@ public class Program
         {
             IPAddress address = IPAddress.Parse(Global.address);
             listener = new TcpListener(address, Global.port);
-
             listener.Start();
             Console.WriteLine($"INFO: Listening on {Global.address.AsSensitive()}:{Global.port.AsSensitive()}...");
 
             var c = Channel.CreateUnbounded<Message>();
             var (message_sender, message_receiver) = (c.Writer, c.Reader);
 
-            Thread server_thread = new Thread(async () => await server(message_receiver, token));
-            server_thread.Start();
+            var serverTask = server(message_receiver, token);
 
-            while (true)
+            using var cts = new CancellationTokenSource();
+            var ct = cts.Token;
+
+            while (!ct.IsCancellationRequested)
             {
-                TcpClient client = listener.AcceptTcpClient();
+                TcpClient client = await listener.AcceptTcpClientAsync(ct);
 
-                Thread t = new Thread(() => handle_client(client, message_sender));
-                t.Start();
+                _ = HandleClientAsync(client, message_sender, ct);
             }
+
+            await serverTask;
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("INFO: Server shutdown requested.");
+
         }
         catch (ArgumentNullException e)
         {
@@ -362,7 +351,7 @@ public class Program
         }
         finally
         {
-            listener!.Stop();
+            listener?.Stop();
         }
 
     }
