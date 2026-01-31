@@ -1,10 +1,11 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Windows.Media;
 using System.Net.Sockets;
 using System.Text;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace csat;
 
@@ -17,7 +18,7 @@ public partial class MainWindow : Window
     private TcpClient? client = null;
     private NetworkStream? activeStream;
     private bool isConnected;
-    private int Port = 4293;
+    private readonly int Port = 4293;
 
     public MainWindow()
     {
@@ -94,7 +95,7 @@ public partial class MainWindow : Window
                 activeStream = client.GetStream();
 
                 Dispatcher.Invoke(() => history.Add(new Message("Connected to server", "Server")));
-                Dispatcher.Invoke(() => ConnectionLight.Fill = Brushes.LimeGreen);
+                Dispatcher.Invoke(() => ConnectionLight.Fill = Brushes.Orange);
                 isConnected = true;
 
                 var buffer = new byte[1024];
@@ -114,10 +115,12 @@ public partial class MainWindow : Window
                             if (receivedText.Contains("Welcome"))
                             {
                                 history.Add(new Message("Authentication successful!", "Server"));
+                                
+                                Dispatcher.Invoke(() => ConnectionLight.Fill = Brushes.LimeGreen);
                             }
                         });
                     }
-                    catch (Exception e)
+                    catch (Exception)
                     {
                         break;
                     }
@@ -163,7 +166,7 @@ public partial class MainWindow : Window
                 // Wrap to the beginning (empty prompt)
                 history_index = -1;
             }
-        
+
             if (history_index == -1)
             {
                 TextPrompt.Text = string.Empty;
@@ -187,7 +190,7 @@ public partial class MainWindow : Window
                 // Wrap to the end (most recent message)
                 history_index = clientMessageHistory.Count - 1;
             }
-        
+
             if (history_index == -1)
             {
                 TextPrompt.Text = string.Empty;
@@ -259,10 +262,10 @@ public partial class MainWindow : Window
                 break;
 
             case "ping":
-            {
-                history.Add(new Message("Pong", "System"));
-                break;
-            }
+                {
+                    history.Add(new Message("Pong", "System"));
+                    break;
+                }
 
             default:
                 {
@@ -314,5 +317,5 @@ public partial class MainWindow : Window
         TextPrompt.CaretIndex =
             cursor - rawToken.Length + match.Length;
     }
-    
+
 }
