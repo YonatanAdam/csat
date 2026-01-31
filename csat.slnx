@@ -1,6 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/Server/Server.csproj" />
-    <Project Path="src\csat\csat.csproj" Type="Classic C#" />
-  </Folder>
-</Solution>
