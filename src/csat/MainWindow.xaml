@@ -13,31 +13,49 @@
     <Window.Resources>
 
         <!-- Colors -->
-        <SolidColorBrush x:Key="BgBrush" Color="#1E1E1E"/>
-        <SolidColorBrush x:Key="PanelBrush" Color="#252526"/>
-        <SolidColorBrush x:Key="BorderBrush" Color="#3C3C3C"/>
-        <SolidColorBrush x:Key="TextBrush" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#0078D4"/>
+        <SolidColorBrush x:Key="BgBrush"
+                Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="PanelBrush"
+                Color="#252526"/>
+        <SolidColorBrush x:Key="BorderBrush"
+                Color="#3C3C3C"/>
+        <SolidColorBrush x:Key="TextBrush"
+                Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="AccentBrush"
+                Color="#0078D4"/>
 
         <!-- TextBox style -->
         <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#2D2D30"/>
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="8"/>
-            <Setter Property="CaretBrush" Value="White"/>
-            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="Background"
+                    Value="#2D2D30"/>
+            <Setter Property="Foreground"
+                    Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush"
+                    Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness"
+                    Value="1"/>
+            <Setter Property="Padding"
+                    Value="8"/>
+            <Setter Property="CaretBrush"
+                    Value="White"/>
+            <Setter Property="FontSize"
+                    Value="16"/>
         </Style>
 
         <!-- Button style -->
         <Style TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background"
+                    Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground"
+                    Value="White"/>
+            <Setter Property="BorderThickness"
+                    Value="0"/>
+            <Setter Property="Padding"
+                    Value="12,6"/>
+            <Setter Property="FontSize"
+                    Value="14"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -51,28 +69,36 @@
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#2899F5"/>
+                <Trigger Property="IsMouseOver"
+                        Value="True">
+                    <Setter Property="Background"
+                            Value="#2899F5"/>
                 </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#0063B1"/>
+                <Trigger Property="IsPressed"
+                        Value="True">
+                    <Setter Property="Background"
+                            Value="#0063B1"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
         <!-- Chat bubble -->
-        <Style x:Key="ChatBubble" TargetType="Border">
-            <Setter Property="CornerRadius" Value="4"/>
-            <Setter Property="Padding" Value="8,2"/> 
-            <Setter Property="Margin" Value="6,1"/>
+        <Style x:Key="ChatBubble"
+                TargetType="Border">
+            <Setter Property="CornerRadius"
+                    Value="4"/>
+            <Setter Property="Padding"
+                    Value="8,2"/>
+            <Setter Property="Margin"
+                    Value="6,1"/>
         </Style>
 
     </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Chat history -->
@@ -86,18 +112,24 @@
             <!-- Disable selection / highlight -->
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
-                    <Setter Property="Focusable" Value="False"/>
-                    <Setter Property="IsTabStop" Value="False"/>
-                    <Setter Property="Background" Value="Transparent"/>
-                    <Setter Property="BorderThickness" Value="0"/>
-                    <Setter Property="Padding" Value="0"/>
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Focusable"
+                            Value="False"/>
+                    <Setter Property="IsTabStop"
+                            Value="False"/>
+                    <Setter Property="Background"
+                            Value="Transparent"/>
+                    <Setter Property="BorderThickness"
+                            Value="0"/>
+                    <Setter Property="Padding"
+                            Value="0"/>
+                    <Setter Property="HorizontalContentAlignment"
+                            Value="Stretch"/>
 
                     <!-- Kill all visual states -->
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="ListViewItem">
-                                <ContentPresenter />
+                                <ContentPresenter/>
                             </ControlTemplate>
                         </Setter.Value>
                     </Setter>
@@ -107,12 +139,19 @@
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <Border Style="{StaticResource ChatBubble}">
-                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextBrush}" IsHitTestVisible="False">
-                            <Run Text="{Binding Timestamp, StringFormat='[{0:HH:mm}]', Mode=OneWay}" FontSize="14" Foreground="DimGray"/>
+                        <TextBlock TextWrapping="Wrap"
+                                Foreground="{StaticResource TextBrush}"
+                                IsHitTestVisible="False">
+                            <Run Text="{Binding Timestamp, StringFormat='[{0:HH:mm}]', Mode=OneWay}"
+                                    FontSize="14"
+                                    Foreground="DimGray"/>
                             <Run Text=" "/>
-                            <Run Text="{Binding Username, Mode=OneWay}" FontSize="16" FontWeight="SemiBold"/>
+                            <Run Text="{Binding Username, Mode=OneWay}"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"/>
                             <Run Text=": "/>
-                            <Run Text="{Binding Text, Mode=OneWay}" FontSize="16"/>
+                            <Run Text="{Binding Text, Mode=OneWay}"
+                                    FontSize="16"/>
                         </TextBlock>
                     </Border>
                 </DataTemplate>
@@ -129,12 +168,18 @@
 
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                
-                <Ellipse x:Name="ConnectionLight" VerticalAlignment="Center" HorizontalAlignment="Center" Width="15" Height="15" Fill="Red" Margin="0,0, 5,0"/>
+
+                <Ellipse x:Name="ConnectionLight"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Width="15"
+                        Height="15"
+                        Fill="Red"
+                        Margin="0,0, 5,0"/>
 
 
                 <TextBox Grid.Column="1"
