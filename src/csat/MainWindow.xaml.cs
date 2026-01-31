@@ -59,14 +59,13 @@ public partial class MainWindow : Window
 
     private async Task SendAsync()
     {
-        if (string.IsNullOrWhiteSpace(TextPrompt.Text))
+        var messageText = TextPrompt.Text.Trim();
+        if (string.IsNullOrWhiteSpace(messageText))
             return;
 
-        var messageText = TextPrompt.Text.Trim();
+        history.Add(new Message(messageText, "You"));
         clientMessageHistory.Add(messageText);
         history_index = -1;
-
-        history.Add(new Message(messageText, "You"));
         TextPrompt.Clear();
 
         if (messageText.StartsWith('/'))
@@ -75,11 +74,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (activeStream is null)
+        if (activeStream == null || !isConnected)
             return;
 
         var bytes = Encoding.UTF8.GetBytes(messageText + "\n");
         await activeStream.WriteAsync(bytes);
+
     }
 
     private void Connect(string ip)
@@ -88,56 +88,61 @@ public partial class MainWindow : Window
         {
             try
             {
-                Dispatcher.Invoke(() => history.Add(new Message("Connecting to server...", "Server")));
+                await Dispatcher.BeginInvoke(() => history.Add(new Message("Connecting to server...", "Server")));
 
                 client = new TcpClient();
                 await client.ConnectAsync(ip, Port);
                 activeStream = client.GetStream();
-
-                Dispatcher.Invoke(() => history.Add(new Message("Connected to server", "Server")));
-                Dispatcher.Invoke(() => ConnectionLight.Fill = Brushes.Orange);
                 isConnected = true;
+
+                await Dispatcher.BeginInvoke(() =>
+                {
+                    history.Add(new Message("Connected to server", "Server"));
+                    ConnectionLight.Fill = Brushes.Orange;
+                });
 
                 var buffer = new byte[1024];
                 while (client.Connected && isConnected)
                 {
+                    int n;
                     try
                     {
-                        int n = await activeStream.ReadAsync(buffer);
+                        n = await activeStream.ReadAsync(buffer);
                         if (n == 0) break; // Server disconnected
-
-                        var receivedText = Encoding.UTF8.GetString(buffer, 0, n);
-
-                        Dispatcher.Invoke(() =>
-                        {
-                            history.Add(new Message($"{receivedText.TrimEnd()}"));
-
-                            if (receivedText.Contains("Welcome"))
-                            {
-                                history.Add(new Message("Authentication successful!", "Server"));
-                                
-                                Dispatcher.Invoke(() => ConnectionLight.Fill = Brushes.LimeGreen);
-                            }
-                        });
                     }
                     catch (Exception)
                     {
                         break;
                     }
+                    
+                    
+                    var receivedText = Encoding.UTF8.GetString(buffer, 0, n).TrimEnd();
+
+                    await Dispatcher.BeginInvoke(() =>
+                    {
+                        history.Add(new Message(receivedText, "unknown"));
+
+                        if (receivedText.Contains("Welcome"))
+                        {
+                            history.Add(new Message("Authentication successful!", "Server"));
+                                
+                            ConnectionLight.Fill = Brushes.LimeGreen;
+                        }
+                    });
                 }
 
-                Dispatcher.Invoke(() => history.Add(new Message("Disconnected from server", "Server")));
             }
             catch (Exception e)
             {
-                Dispatcher.Invoke(() => history.Add(new Message($"Failed connecting to server: {e.Message}", "Server")));
-
-                Console.WriteLine(e);
+                await Dispatcher.BeginInvoke(() => history.Add(new Message($"Failed connecting to server: {e.Message}", "Server")));
             }
             finally
             {
+                isConnected = false;
                 activeStream?.Dispose();
                 client?.Dispose();
+                await Dispatcher.BeginInvoke(() => history.Add(new Message("Disconnected from server", "Server")));
+                await Dispatcher.BeginInvoke(() => ConnectionLight.Fill = Brushes.Red);
             }
         });
     }
