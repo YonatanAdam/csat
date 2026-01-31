@@ -12,7 +12,7 @@ namespace csat;
 public partial class MainWindow : Window
 {
     private readonly ObservableCollection<Message> history = new ObservableCollection<Message>();
-    private readonly string[] commands = ["connect", "disconnect", "help", "clear", "exit", "ping"];
+    private readonly string[] commands = ["connect", "disconnect", "help", "clear", "exit", "ping", "users"];
     private List<string> clientMessageHistory = new List<string>();
     private int history_index = -1;
     private TcpClient? client = null;
@@ -115,17 +115,40 @@ public partial class MainWindow : Window
                         break;
                     }
                     
-                    
                     var receivedText = Encoding.UTF8.GetString(buffer, 0, n).TrimEnd();
 
-                    await Dispatcher.BeginInvoke(() =>
+                    await Dispatcher.BeginInvoke(() => // parse message
                     {
-                        history.Add(new Message(receivedText, "unknown"));
-
+                        string username;
+                        string content;
+    
+                        // Check if message starts with [username] format
+                        if (receivedText.StartsWith("["))
+                        {
+                            int closingBracket = receivedText.IndexOf(']');
+                            if (closingBracket > 0)
+                            {
+                                username = receivedText.Substring(1, closingBracket - 1);
+                                content = receivedText.Substring(closingBracket + 1).TrimStart();
+                            }
+                            else
+                            {
+                                // Malformed bracket, treat as server message
+                                username = "Server";
+                                content = receivedText;
+                            }
+                        }
+                        else
+                        {
+                            // No brackets, it's a server message
+                            username = "Server";
+                            content = receivedText;
+                        }
+    
+                        history.Add(new Message(content, username));
+    
                         if (receivedText.Contains("Welcome"))
                         {
-                            history.Add(new Message("Authentication successful!", "Server"));
-                                
                             ConnectionLight.Fill = Brushes.LimeGreen;
                         }
                     });
@@ -271,6 +294,12 @@ public partial class MainWindow : Window
                     history.Add(new Message("Pong", "System"));
                     break;
                 }
+
+            case "users":
+            {
+                    history.Add(new Message("users: Unhandled", "System"));
+                    break;
+            }
 
             default:
                 {

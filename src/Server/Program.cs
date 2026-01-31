@@ -13,6 +13,7 @@ public static class Global
     public static TimeSpan BAN_LIMIT = TimeSpan.FromMinutes(10);
     public static TimeSpan MESSAGE_RATE = TimeSpan.FromSeconds(1);
     public static int STRIKE_LIMIT = 10;
+    public static int MAX_USERNAME_LENGTH = 32;
 }
 
 public class Sensitive<T>
@@ -173,7 +174,7 @@ public class Program
                         }
                     case Message.ClientDisconnected(var author_addr):
                         {
-                            Console.WriteLine($"INFO: Cient {author_addr} disconnected");
+                            Console.WriteLine($"INFO: Client {author_addr} disconnected");
                             clients.Remove(author_addr);
                             break;
                         }
@@ -194,35 +195,104 @@ public class Program
                                         
                                         if (author.authenticated)
                                         {
-                                            Console.WriteLine($"INFO: Client {author_addr} sent message: [{string.Join(", ", bytes)}]");
-                                            foreach (var (addr, client) in clients)
+                                            // Check if username is set - if not, this is the username input
+                                            if (author.Username == "Unknown")
                                             {
-                                                if (addr != author_addr && client.authenticated)
+                                                var username = text.Trim();
+                                                
+                                                // Validate username
+                                                if (username.Length == 0 || username.Length > Global.MAX_USERNAME_LENGTH)
                                                 {
                                                     try
                                                     {
-                                                        await client.conn.GetStream().WriteAsync(bytes, ct);
+                                                        await stream.WriteAsync(Encoding.UTF8.GetBytes($"Username must be between 1 and {Global.MAX_USERNAME_LENGTH} characters. Try again: "), ct);
                                                     }
                                                     catch (Exception e)
                                                     {
-                                                        Console.WriteLine($"Error: could not broadcast message to all the clients from {author_addr}: {e}");
+                                                        Console.WriteLine($"Error: Could not send username validation error to {author_addr}: {e.AsSensitive()}");
                                                     }
                                                 }
-
+                                                else if (clients.Values.Any(c => c.Username == username && c.authenticated && c.conn.Connected))
+                                                {
+                                                    try
+                                                    {
+                                                        await stream.WriteAsync(Encoding.UTF8.GetBytes("Username already taken. Try again: "), ct);
+                                                    }
+                                                    catch (Exception e)
+                                                    {
+                                                        Console.WriteLine($"Error: Could not send username taken error to {author_addr}: {e.AsSensitive()}");
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    author.Username = username;
+                                                    Console.WriteLine($"INFO: {author_addr} set username to '{username}'");
+                                                    
+                                                    try
+                                                    {
+                                                        await stream.WriteAsync(Encoding.UTF8.GetBytes($"Welcome to the club, {username}!\n"), ct);
+                                                        
+                                                        // Notify other users
+                                                        var joinMsg = Encoding.UTF8.GetBytes($"[{username} joined the chat]\n");
+                                                        foreach (var (addr, client) in clients)
+                                                        {
+                                                            if (addr != author_addr && client.authenticated && client.Username != "Unknown")
+                                                            {
+                                                                try
+                                                                {
+                                                                    if (client.conn.Connected)
+                                                                        await client.conn.GetStream().WriteAsync(joinMsg, ct);
+                                                                }
+                                                                catch (Exception e)
+                                                                {
+                                                                    Console.WriteLine($"Error: could not broadcast join message to {addr}: {e}");
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    catch (Exception e)
+                                                    {
+                                                        Console.WriteLine($"Error: Could not send final welcome message to {author_addr}: {e.AsSensitive()}");
+                                                    }
+                                                }
+                                            }
+                                            else
+                                            {
+                                                // User has username set, this is a regular chat message
+                                                Console.WriteLine($"INFO: [{author.Username}] {author_addr} sent message: [{string.Join(", ", bytes)}]");
+                                                
+                                                var messageWithUsername = Encoding.UTF8.GetBytes($"[{author.Username}]{text}"); // [username]content
+                                                
+                                                foreach (var (addr, client) in clients)
+                                                {
+                                                    if (addr != author_addr && client.authenticated && client.Username != "Unknown")
+                                                    {
+                                                        try
+                                                        {
+                                                            if (client.conn.Connected)
+                                                                await client.conn.GetStream().WriteAsync(messageWithUsername, ct);
+                                                        }
+                                                        catch (Exception e)
+                                                        {
+                                                            Console.WriteLine($"Error: could not broadcast message to all the clients from {author_addr}: {e}");
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                         else
                                         {
+                                            // Token authentication
                                             if (text.TrimEnd() == token)
                                             {
                                                 author.authenticated = true;
                                                 try
                                                 {
-                                                    await stream.WriteAsync(Encoding.UTF8.GetBytes("Welcome to the club!\n"), ct);
+                                                    await stream.WriteAsync(Encoding.UTF8.GetBytes("Token accepted! Enter your username: "), ct);
                                                 }
                                                 catch (Exception e)
                                                 {
-                                                    Console.WriteLine($"Error: Could not send welcome message to {author_addr}: {e.AsSensitive()}");
+                                                    Console.WriteLine($"Error: Could not send username prompt to {author_addr}: {e.AsSensitive()}");
                                                 }
                                                 Console.WriteLine($"INFO: {author_addr} authenticated!");
 
