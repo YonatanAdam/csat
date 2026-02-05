@@ -5,7 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Threading;
+using Utils;
 
 namespace csat;
 
@@ -40,9 +40,10 @@ public partial class MainWindow : Window
 
     private void WelcomeMessage()
     {
-        history.Add(new Message("Welcome!", "Server"));
-        history.Add(new Message("Try:  /connect <ip>        Connect to a server"));
-        history.Add(new Message("or   /help /h               to see all commands"));
+        string msg = "Welcome!\n" +
+                     "Try:  /connect <ip>        Connect to a server\n" +
+                     "or   /help /h               to see all commands";
+        history.Add(new Message(msg, "Server"));
     }
 
     private async void SendButton_OnClick(object sender, RoutedEventArgs e)
@@ -114,39 +115,24 @@ public partial class MainWindow : Window
                     {
                         break;
                     }
-                    
+
                     var receivedText = Encoding.UTF8.GetString(buffer, 0, n).TrimEnd();
 
                     await Dispatcher.BeginInvoke(() => // parse message
                     {
-                        string username;
-                        string content;
-    
+                        string username = "Server";
+                        string content = receivedText;
+
                         // Check if message starts with [username] format
-                        if (receivedText.StartsWith("["))
+                        if (receivedText.StartsWith("[") && receivedText.Contains("]"))
                         {
-                            int closingBracket = receivedText.IndexOf(']');
-                            if (closingBracket > 0)
-                            {
-                                username = receivedText.Substring(1, closingBracket - 1);
-                                content = receivedText.Substring(closingBracket + 1).TrimStart();
-                            }
-                            else
-                            {
-                                // Malformed bracket, treat as server message
-                                username = "Server";
-                                content = receivedText;
-                            }
+                            var parts = receivedText.Split(']');
+                            username = parts[0][1..];
+                            content = parts[1].TrimStart();
                         }
-                        else
-                        {
-                            // No brackets, it's a server message
-                            username = "Server";
-                            content = receivedText;
-                        }
-    
+
                         history.Add(new Message(content, username));
-    
+
                         if (receivedText.Contains("Welcome"))
                         {
                             ConnectionLight.Fill = Brushes.LimeGreen;
@@ -234,32 +220,21 @@ public partial class MainWindow : Window
 
     private void HandleCommand(string input)
     {
-        if (!input.StartsWith('/'))
+        if (!CommandParser.TryParse(input, out string command, out string[] args))
+        {
             return;
-
-        var parts = input[1..]
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-        if (parts.Length == 0)
-            return;
-
-        var command = parts[0].ToLowerInvariant();
-        var args = parts.Skip(1).ToArray();
+        }
 
         switch (command)
         {
             case "connect":
+                if (args.Length < 1)
                 {
-                    if (args.Length < 1)
-                    {
-                        history.Add(new Message("error: ip not provided"));
-                        history.Add(new Message("usage:  /connect <ip>        Connect to a server"));
-                    }
-                    else
-                    {
-                        var ip = args[0];
-                        Connect(ip);
-                    }
+                    history.Add(new Message("error: ip address not provided\nUsage: /connect <ip>", "Server"));
+                }
+                else
+                {
+                    Connect(args[0]);
                 }
                 break;
 
@@ -272,42 +247,25 @@ public partial class MainWindow : Window
                 break;
 
             case "help" or "h":
-                {
-                    history.Add(new Message("Available commands:", "Server"));
-                    history.Add(new Message("  /connect <ip>        Connect to a server"));
-                    history.Add(new Message("  /disconnect          Disconnect from the server"));
-                    history.Add(new Message("  /clear               Clear the chat history"));
-                    history.Add(new Message("  /exit                Exits the application"));
-                    history.Add(new Message("  /help /h             Show this help message"));
-                }
+                ShowHelp();
                 break;
 
             case "exit":
-                {
-                    HandleDisconnect();
-                    Application.Current.Shutdown();
-                }
+                HandleDisconnect();
+                Application.Current.Shutdown();
                 break;
 
             case "ping":
-                {
-                    history.Add(new Message("Pong", "System"));
-                    break;
-                }
+                history.Add(new Message("Pong", "System"));
+                break;
 
             case "users":
-            {
-                    history.Add(new Message("users: Unhandled", "System"));
-                    break;
-            }
+                history.Add(new Message("users: Unhandled", "System"));
+                break;
 
             default:
-                {
-                    history.Add(new Message($"error: unknown command '{command}'", "Server"));
-                    history.Add(new Message("Type /help for more information."));
-                    break;
-                }
-
+                history.Add(new Message($"error: unknown command '{command}'\nType /help for info.", "Server"));
+                break;
         }
     }
 
@@ -316,6 +274,18 @@ public partial class MainWindow : Window
         client?.Close();
         isConnected = false;
         ConnectionLight.Fill = Brushes.Red;
+    }
+
+    private void ShowHelp()
+    {
+        string helpText = "Available commands:\n" +
+                          "  /connect <ip>        Connect to a server\n" +
+                          "  /disconnect          Disconnect from the server\n" +
+                          "  /clear               Clear the chat history\n" +
+                          "  /exit                Exits the application\n" +
+                          "  /help /h             Show this help message";
+
+        history.Add(new Message(helpText, "Server"));
     }
 
 
