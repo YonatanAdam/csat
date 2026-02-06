@@ -47,7 +47,7 @@ public class MessageHandler
         var stream = client.conn.GetStream();
         var curNow = DateTime.UtcNow;
 
-        if (client.CanSendMessage(curNow))
+        if (!client.CanSendMessage(curNow))
         {
             await HandleRateLimitViolationAsync(msg.author_addr, client, curNow, ct);
             return;
