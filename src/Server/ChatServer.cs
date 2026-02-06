@@ -30,7 +30,7 @@ public class ChatServer
     public async Task StartAsync()
     {
         _logger.Info($"Token: {this._token}");
-        
+
         this._listener = new TcpListener(IPAddress.Parse(Global.ADDRESS), Global.PORT);
         this._listener.Start();
         _logger.Info($"Listening on {Global.ADDRESS}:{Global.PORT}...");
@@ -38,7 +38,7 @@ public class ChatServer
         var messageProcessingTask = ProcessMessagesAsync(this._cts.Token);
         var consoleListenerTask = RunConsoleListenerAsync(this._cts.Token);
         var clientAcceptTask = AcceptClientsAsync(this._cts.Token);
-        
+
         await Task.WhenAll(messageProcessingTask, consoleListenerTask, clientAcceptTask);
     }
 
@@ -142,15 +142,3 @@ public class ChatServer
         return token;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-

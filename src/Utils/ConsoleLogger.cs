@@ -41,7 +41,6 @@ public class ConsoleLogger : ILogger
         Console.Write($"({_categoryName}) {levelStr}: ");
         Console.ForegroundColor = originalColor;
         Console.WriteLine(message);
-        
     }
 
     public void Log(LogLevel level, string message, Exception ex)
