@@ -14,24 +14,26 @@ public class ChatServer
     private Channel<Message> _messageChannel;
     private MessageHandler _messageHandler;
     private CancellationTokenSource _cts;
+    private readonly ILogger _logger;
 
-    public ChatServer(string address, int port)
+    public ChatServer(string address, int port, ILogger logger)
     {
         _address = address;
         _port = port;
         _token = GenerateToken();
         _messageChannel = Channel.CreateUnbounded<Message>();
-        _messageHandler = new MessageHandler(this._token);
+        _messageHandler = new MessageHandler(this._token, logger);
         _cts = new CancellationTokenSource();
+        _logger = logger;
     }
 
     public async Task StartAsync()
     {
-        Console.WriteLine($"Token: {this._token}");
+        _logger.Info($"Token: {this._token}");
         
         this._listener = new TcpListener(IPAddress.Parse(Global.ADDRESS), Global.PORT);
         this._listener.Start();
-        Console.WriteLine($"INFO: Listening on {Global.ADDRESS}:{Global.PORT}...");
+        _logger.Info($"Listening on {Global.ADDRESS}:{Global.PORT}...");
 
         var messageProcessingTask = ProcessMessagesAsync(this._cts.Token);
         var consoleListenerTask = RunConsoleListenerAsync(this._cts.Token);
@@ -81,7 +83,7 @@ public class ChatServer
         var author_addr = client.Client.RemoteEndPoint?.ToString();
         if (author_addr == null)
         {
-            Console.WriteLine("Error: could not resolve client address");
+            _logger.Error("could not resolve client address");
             return;
         }
 
@@ -106,19 +108,19 @@ public class ChatServer
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine($"INFO: Read operation for {author_addr} canceled.");
+                _logger.Info($"Read operation for {author_addr} canceled.");
                 break;
             }
             catch (IOException)
             {
                 if (!client.Connected)
-                    Console.WriteLine($"INFO: Connection for {author_addr} closed by server.");
+                    _logger.Info($"Connection for {author_addr} closed by server.");
                 else
-                    Console.WriteLine($"Network Error: Connection lost for {author_addr}");
+                    _logger.Error($"Connection lost for {author_addr}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Unexpected error: {ex.AsSensitive()}");
+                _logger.Error($"{ex.AsSensitive()}");
                 break;
             }
         }

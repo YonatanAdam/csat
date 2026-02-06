@@ -5,7 +5,11 @@ public class Program
 {
     static async Task Main(string[] args)
     {
-        ChatServer server = new ChatServer(Global.ADDRESS, Global.PORT);
+        LoggerFactory.SetMinimumLevel(LogLevel.Info);
+        
+        var logger =  LoggerFactory.CreateLogger<ChatServer>();
+        
+        ChatServer server = new ChatServer(Global.ADDRESS, Global.PORT, logger);
         await server.StartAsync();
     }
 }

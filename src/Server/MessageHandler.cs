@@ -10,13 +10,15 @@ public class MessageHandler
     private readonly Dictionary<string, DateTime> _banned;
     private readonly string _token;
     private readonly AdminCommandHandler _adminCommandHandler;
+    private readonly ILogger _logger;
 
-    public MessageHandler(string token)
+    public MessageHandler(string token, ILogger logger)
     {
         this._token = token;
         this._clients = new Dictionary<string, Client>();
         this._banned = new Dictionary<string, DateTime>();
         this._adminCommandHandler = new AdminCommandHandler(_clients, _banned);
+        this._logger = logger;
     }
 
     public async Task HandleMessageAsync(Message msg, CancellationToken ct)
@@ -78,8 +80,8 @@ public class MessageHandler
     private async Task BroadcastChatMessageAsync(string senderAddr, Client sender, string text, byte[] data,
         CancellationToken ct)
     {
-        Console.WriteLine(
-            $"INFO: [{sender.Username}] {sender.conn.Client.RemoteEndPoint} sent message: [{string.Join(", ", data)}]");
+        _logger.Info(
+            $"[{sender.Username}] {sender.conn.Client.RemoteEndPoint} sent message: [{string.Join(", ", data)}]");
 
         var chatMsg = Encoding.UTF8.GetBytes($"[{sender.Username}]{text}");
 
@@ -113,8 +115,8 @@ public class MessageHandler
         else
         {
             client.Username = username;
-            Console.WriteLine($"INFO: {client.conn.Client.RemoteEndPoint} is now '{username}'");
-            await stream.WriteAsync(Encoding.UTF8.GetBytes($"Welcome {username}!\n"), ct);
+            _logger.Info($"{client.conn.Client.RemoteEndPoint} is now '{username}'");
+            await stream.WriteAsync(Encoding.UTF8.GetBytes($"[Server]Welcome {username}!\n"), ct);
         }
     }
 
@@ -124,6 +126,7 @@ public class MessageHandler
         if (text.TrimEnd() == _token)
         {
             client.authenticated = true;
+            _logger.Info($"{client.conn.Client.RemoteEndPoint} is now authenticated");
             await stream.WriteAsync(Encoding.UTF8.GetBytes("Authenticated! Enter username: "), ct);
         }
         else
@@ -153,7 +156,7 @@ public class MessageHandler
 
     private async Task BanClientAsync(string addr, Client client, DateTime now, CancellationToken ct)
     {
-        Console.WriteLine($"INFO: Client {addr} got banned");
+        _logger.Info($"Client {addr} got banned");
         _banned[addr] = now;
         var banMsg = Encoding.ASCII.GetBytes("[Server]You are banned MF\n");
 
@@ -163,7 +166,7 @@ public class MessageHandler
         }
         catch (Exception e)
         {
-            Console.WriteLine($"Error: could not send banned msg to {addr}: {e}");
+            _logger.Error($"could not send banned msg to {addr}: {e}");
         }
         finally
         {
@@ -174,7 +177,7 @@ public class MessageHandler
 
     private Task HandleClientDisconnectedAsync(Message.ClientDisconnected addr, CancellationToken ct)
     {
-        Console.WriteLine($"INFO: Client {addr.author_addr} disconnected");
+        _logger.Info($"Client {addr.author_addr} disconnected");
         this._clients.Remove(addr.author_addr);
         return Task.CompletedTask;
     }
@@ -190,7 +193,7 @@ public class MessageHandler
             if (diff < Global.BAN_LIMIT)
             {
                 var timeLeft = Global.BAN_LIMIT - diff;
-                Console.WriteLine($"INFO: {author_addr} blocked (Banned for {timeLeft.TotalSeconds:F0}s)");
+                _logger.Warning($"{author_addr} blocked (Banned for {timeLeft.TotalSeconds:F0}s)");
                 string ban_msg = $"You are banned MF: {timeLeft.TotalSeconds:F0} secs left\n";
 
                 try
@@ -210,11 +213,11 @@ public class MessageHandler
             }
         }
 
-        Console.WriteLine($"INFO: Client {author_addr} connected");
+        _logger.Info($"Client {author_addr} connected");
         if (author_addr != null) this._clients[author_addr] = new Client(author.client, now, 0, false);
         try
         {
-            await stream.WriteAsync(Encoding.UTF8.GetBytes("Token: "), ct);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("[Server]Enter auth token: "), ct);
         }
         catch
         {
