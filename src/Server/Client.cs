@@ -1,10 +1,12 @@
+using Utils;
+
 namespace csat;
 
 using System.Net.Sockets;
 
 public class Client
 {
-    public TcpClient conn;
+    public readonly TcpClient conn;
     public DateTime last_message;
     public int strike_count;
     public bool authenticated;
@@ -18,4 +20,9 @@ public class Client
         this.authenticated = authed;
         this.Username = username;
     }
+    
+    public bool CanSendMessage(DateTime now) => (now - this.last_message) >= Global.MESSAGE_RATE;
+    public bool ShouldBeBanned() => strike_count >= Global.STRIKE_LIMIT;
+
+    public void Strike() =>  strike_count += 1;
 }

@@ -47,7 +47,7 @@ public class MessageHandler
         var stream = client.conn.GetStream();
         var curNow = DateTime.UtcNow;
 
-        if ((curNow - client.last_message) < Global.MESSAGE_RATE)
+        if (client.CanSendMessage(curNow))
         {
             await HandleRateLimitViolationAsync(msg.author_addr, client, curNow, ct);
             return;
@@ -135,8 +135,8 @@ public class MessageHandler
 
     private async Task HandleInvalidMessageAsync(string addr, Client client, DateTime now, CancellationToken ct)
     {
-        client.strike_count += 1;
-        if (client.strike_count >= Global.STRIKE_LIMIT)
+        client.Strike();
+        if (client.ShouldBeBanned())
         {
             await BanClientAsync(addr, client, now, ct);
         }
@@ -144,8 +144,8 @@ public class MessageHandler
 
     private async Task HandleRateLimitViolationAsync(string addr, Client client, DateTime now, CancellationToken ct)
     {
-        client.strike_count += 1;
-        if (client.strike_count >= Global.STRIKE_LIMIT)
+        client.Strike();
+        if (client.ShouldBeBanned())
         {
             await BanClientAsync(addr, client, now, ct);
         }
