@@ -11,14 +11,14 @@ namespace csat;
 
 public partial class MainWindow : Window
 {
-    private readonly ObservableCollection<Message> history = new ObservableCollection<Message>();
-    private readonly string[] commands = ["connect", "disconnect", "help", "clear", "exit", "ping", "users"];
-    private List<string> clientMessageHistory = new List<string>();
-    private int history_index = -1;
-    private TcpClient? client = null;
-    private NetworkStream? activeStream;
-    private bool isConnected;
-    private readonly int Port = 4293;
+    private readonly ObservableCollection<Message> _history = new ObservableCollection<Message>();
+    private readonly string[] _commands = ["connect", "disconnect", "help", "clear", "exit", "ping", "users"];
+    private readonly List<string> _clientMessageHistory = new List<string>();
+    private int _historyIndex = -1;
+    private TcpClient? _client = null;
+    private NetworkStream? _activeStream;
+    private bool _isConnected;
+    private readonly int _port = 4293;
 
     public MainWindow()
     {
@@ -26,14 +26,14 @@ public partial class MainWindow : Window
         WelcomeMessage();
 
         TextPrompt.Focus();
-        ChatHistory.ItemsSource = history;
+        ChatHistory.ItemsSource = _history;
 
-        history.CollectionChanged += (s, e) =>
+        _history.CollectionChanged += (s, e) =>
         {
             if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
             {
                 // Ensure scroll to the very last item added
-                ChatHistory.ScrollIntoView(history[^1]);
+                ChatHistory.ScrollIntoView(_history[^1]);
             }
         };
     }
@@ -41,7 +41,7 @@ public partial class MainWindow : Window
     private void WelcomeMessage()
     {
         string msg = "You are offline. Use /connect <ip> to connect to a server";
-        history.Add(new Message(msg, "System"));
+        _history.Add(new Message(msg, "System"));
     }
 
     private async void SendButton_OnClick(object sender, RoutedEventArgs e)
@@ -52,7 +52,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            history.Add(new Message($"Unexpected error: {ex.Message}", "System"));
+            _history.Add(new Message($"Unexpected error: {ex.Message}", "System"));
         }
     }
 
@@ -62,9 +62,9 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(messageText))
             return;
 
-        history.Add(new Message(messageText, "You"));
-        clientMessageHistory.Add(messageText);
-        history_index = -1;
+        _history.Add(new Message(messageText, "You"));
+        _clientMessageHistory.Add(messageText);
+        _historyIndex = -1;
         TextPrompt.Clear();
 
         if (messageText.StartsWith('/'))
@@ -73,11 +73,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (activeStream == null || !isConnected)
+        if (_activeStream == null || !_isConnected)
             return;
 
         var bytes = Encoding.UTF8.GetBytes(messageText + "\n");
-        await activeStream.WriteAsync(bytes);
+        await _activeStream.WriteAsync(bytes);
 
     }
 
@@ -87,29 +87,29 @@ public partial class MainWindow : Window
         {
             try
             {
-                await Dispatcher.BeginInvoke(() => history.Add(new Message("Connecting to server...", "System")));
+                await Dispatcher.BeginInvoke(() => _history.Add(new Message("Connecting to server...", "System")));
 
-                client = new TcpClient();
-                await client.ConnectAsync(ip, Port);
-                activeStream = client.GetStream();
-                isConnected = true;
+                _client = new TcpClient();
+                await _client.ConnectAsync(ip, _port);
+                _activeStream = _client.GetStream();
+                _isConnected = true;
 
                 await Dispatcher.BeginInvoke(() =>
                 {
-                    history.Clear();
+                    _history.Clear();
                     ConnectionLight.Fill = Brushes.Orange;
                 });
 
                 var tokenBytes = Encoding.UTF8.GetBytes(token + "\n");
-                await activeStream.WriteAsync(tokenBytes);
+                await _activeStream.WriteAsync(tokenBytes);
 
                 var buffer = new byte[1024];
-                while (client.Connected && isConnected)
+                while (_client.Connected && _isConnected)
                 {
                     int n;
                     try
                     {
-                        n = await activeStream.ReadAsync(buffer);
+                        n = await _activeStream.ReadAsync(buffer);
                         if (n == 0) break; // Server disconnected
                     }
                     catch (Exception)
@@ -132,7 +132,7 @@ public partial class MainWindow : Window
                             content = parts[1].TrimStart();
                         }
 
-                        history.Add(new Message(content, username));
+                        _history.Add(new Message(content, username));
 
                         if (receivedText.Contains("Welcome"))
                         {
@@ -144,20 +144,20 @@ public partial class MainWindow : Window
             }
             catch (Exception e)
             {
-                await Dispatcher.BeginInvoke(() => history.Add(new Message($"Failed connecting to server: {e.Message}", "System")));
+                await Dispatcher.BeginInvoke(() => _history.Add(new Message($"Failed connecting to server: {e.Message}", "System")));
             }
             finally
             {
-                isConnected = false;
-                activeStream?.Dispose();
-                client?.Dispose();
-                await Dispatcher.BeginInvoke(() => history.Add(new Message("Disconnected from server", "System")));
+                _isConnected = false;
+                _activeStream?.Dispose();
+                _client?.Dispose();
+                await Dispatcher.BeginInvoke(() => _history.Add(new Message("Disconnected from server", "System")));
                 await Dispatcher.BeginInvoke(() => ConnectionLight.Fill = Brushes.Red);
             }
         });
     }
 
-    private void MainWindow_OnClosing(object? sender, CancelEventArgs e) => client?.Close();
+    private void MainWindow_OnClosing(object? sender, CancelEventArgs e) => _client?.Close();
 
     private void TextPrompt_OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -167,28 +167,28 @@ public partial class MainWindow : Window
             e.Handled = true;
         }
 
-        if (clientMessageHistory.Count == 0) return;
+        if (_clientMessageHistory.Count == 0) return;
 
         if ((e.Key == Key.P && Keyboard.Modifiers == ModifierKeys.Control) || e.Key == Key.Up)
         {
             e.Handled = true;
-            if (history_index < clientMessageHistory.Count - 1)
+            if (_historyIndex < _clientMessageHistory.Count - 1)
             {
-                history_index++;
+                _historyIndex++;
             }
             else
             {
                 // Wrap to the beginning (empty prompt)
-                history_index = -1;
+                _historyIndex = -1;
             }
 
-            if (history_index == -1)
+            if (_historyIndex == -1)
             {
                 TextPrompt.Text = string.Empty;
             }
             else
             {
-                TextPrompt.Text = clientMessageHistory[^(history_index + 1)];
+                TextPrompt.Text = _clientMessageHistory[^(_historyIndex + 1)];
                 TextPrompt.CaretIndex = TextPrompt.Text.Length;
             }
         }
@@ -196,23 +196,23 @@ public partial class MainWindow : Window
         else if ((e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control) || e.Key == Key.Down)
         {
             e.Handled = true;
-            if (history_index > -1)
+            if (_historyIndex > -1)
             {
-                history_index--;
+                _historyIndex--;
             }
             else
             {
                 // Wrap to the end (most recent message)
-                history_index = clientMessageHistory.Count - 1;
+                _historyIndex = _clientMessageHistory.Count - 1;
             }
 
-            if (history_index == -1)
+            if (_historyIndex == -1)
             {
                 TextPrompt.Text = string.Empty;
             }
             else
             {
-                TextPrompt.Text = clientMessageHistory[^(history_index + 1)];
+                TextPrompt.Text = _clientMessageHistory[^(_historyIndex + 1)];
                 TextPrompt.CaretIndex = TextPrompt.Text.Length;
             }
         }
@@ -231,11 +231,11 @@ public partial class MainWindow : Window
             case "connect":
                 if (args.Length < 1)
                 {
-                    history.Add(new Message("error: ip address not provided\nUsage: /connect <ip>", "System"));
+                    _history.Add(new Message("error: ip address not provided\nUsage: /connect <ip>", "System"));
                 } else if (args.Length < 2)
                 {
                     
-                    history.Add(new Message("error: authenticaiton token not provided\nUsage: /connect <ip> <token>", "System"));
+                    _history.Add(new Message("error: authenticaiton token not provided\nUsage: /connect <ip> <token>", "System"));
                 }
                 else
                 {
@@ -248,7 +248,7 @@ public partial class MainWindow : Window
                 break;
 
             case "clear":
-                history.Clear();
+                _history.Clear();
                 break;
 
             case "help" or "h":
@@ -261,23 +261,23 @@ public partial class MainWindow : Window
                 break;
 
             case "ping":
-                history.Add(new Message("Pong", "System"));
+                _history.Add(new Message("Pong", "System"));
                 break;
 
             case "users":
-                history.Add(new Message("users: Unhandled", "System"));
+                _history.Add(new Message("users: Unhandled", "System"));
                 break;
 
             default:
-                history.Add(new Message($"error: unknown command '{command}'\nType /help for info.", "System"));
+                _history.Add(new Message($"error: unknown command '{command}'\nType /help for info.", "System"));
                 break;
         }
     }
 
     private void HandleDisconnect()
     {
-        client?.Close();
-        isConnected = false;
+        _client?.Close();
+        _isConnected = false;
         ConnectionLight.Fill = Brushes.Red;
     }
 
@@ -290,7 +290,7 @@ public partial class MainWindow : Window
                           "  /exit                Exits the application\n" +
                           "  /help /h             Show this help message";
 
-        history.Add(new Message(helpText, "System"));
+        _history.Add(new Message(helpText, "System"));
     }
 
 
@@ -309,7 +309,7 @@ public partial class MainWindow : Window
         bool hasSlash = rawToken.StartsWith('/');
         var token = hasSlash ? rawToken[1..] : rawToken;
 
-        var matches = commands
+        var matches = _commands
             .Where(c => c.StartsWith(token, StringComparison.OrdinalIgnoreCase))
             .ToArray();
 

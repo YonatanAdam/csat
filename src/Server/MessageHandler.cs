@@ -13,11 +13,11 @@ public class MessageHandler {
 
     public MessageHandler(string token, ILogger logger)
     {
-        this._token = token;
-        this._clients = new Dictionary<string, Client>();
-        this._banned = new Dictionary<string, DateTime>();
-        this._adminCommandHandler = new AdminCommandHandler(_clients, _banned);
-        this._logger = logger;
+        _token = token;
+        _clients = new Dictionary<string, Client>();
+        _banned = new Dictionary<string, DateTime>();
+        _adminCommandHandler = new AdminCommandHandler(_clients, _banned);
+        _logger = logger;
     }
 
     public async Task HandleMessageAsync(Message msg, CancellationToken ct)
@@ -43,10 +43,10 @@ public class MessageHandler {
     {
         var text = Encoding.UTF8.GetString(msg.Data);
     
-        if (!this._clients.TryGetValue(msg.author_addr!, out var client))
+        if (!_clients.TryGetValue(msg.author_addr!, out var client))
             return;
 
-        var stream = client.conn.GetStream();
+        var stream = client.Conn.GetStream();
         var curNow = DateTime.UtcNow;
 
         if (!client.CanSendMessage(curNow))
@@ -61,9 +61,9 @@ public class MessageHandler {
             return;
         }
 
-        client.last_message = curNow;
+        client.LastMessage = curNow;
 
-        if (!client.authenticated)
+        if (!client.Authenticated)
         {
             await HandleAuthenticationAsync(msg.author_addr, client, text, stream, ct);
         }
@@ -81,19 +81,22 @@ public class MessageHandler {
         CancellationToken ct)
     {
         _logger.Info(
-            $"[{sender.Username}] {sender.conn.Client.RemoteEndPoint} sent message: [{string.Join(", ", data)}]");
+            $"[{sender.Username}] {sender.Conn.Client.RemoteEndPoint} sent message: [{string.Join(", ", data)}]");
 
         var chatMsg = Encoding.UTF8.GetBytes($"[{sender.Username}]{text}");
 
         foreach (var (addr, client) in _clients)
         {
-            if (addr != senderAddr && client.authenticated)
+            if (addr != senderAddr && client.Authenticated)
             {
                 try
                 {
-                    await client.conn.GetStream().WriteAsync(chatMsg, ct);
+                    await client.Conn.GetStream().WriteAsync(chatMsg, ct);
                 }
-                catch { }
+                catch
+                {
+                    _logger.Warning($"could not send message to {addr}");
+                }
             }
         }
     }
@@ -113,7 +116,7 @@ public class MessageHandler {
         else
         {
             client.Username = username;
-            _logger.Info($"{client.conn.Client.RemoteEndPoint} is now '{username}'");
+            _logger.Info($"{client.Conn.Client.RemoteEndPoint} is now '{username}'");
             await stream.WriteAsync(Encoding.UTF8.GetBytes($"[Server]Welcome {username}!\n"), ct);
         }
     }
@@ -124,15 +127,15 @@ public class MessageHandler {
         var receivedToken = text.Trim();
         if (receivedToken == _token)
         {
-            client.authenticated = true;
-            _logger.Info($"{client.conn.Client.RemoteEndPoint} is now authenticated");
+            client.Authenticated = true;
+            _logger.Info($"{client.Conn.Client.RemoteEndPoint} is now authenticated");
             await stream.WriteAsync(Encoding.UTF8.GetBytes("[Server]Authenticated! Enter username: "), ct);
         }
         else
         {
             _logger.Warning($"Auth failed for {addr}: token mismatch.");
             await stream.WriteAsync(Encoding.UTF8.GetBytes("[Server]Incorrect token, disconnecting."), ct);
-            client.conn.Close();
+            client.Conn.Close();
             _clients.Remove(addr);
         }
     }
@@ -163,7 +166,7 @@ public class MessageHandler {
 
         try
         {
-            await client.conn.GetStream().WriteAsync(banMsg, ct);
+            await client.Conn.GetStream().WriteAsync(banMsg, ct);
         }
         catch (Exception e)
         {
@@ -172,38 +175,41 @@ public class MessageHandler {
         finally
         {
             _clients.Remove(addr);
-            client.conn.Close();
+            client.Conn.Close();
         }
     }
 
     private Task HandleClientDisconnectedAsync(Message.ClientDisconnected addr, CancellationToken ct)
     {
         _logger.Info($"Client {addr.author_addr} disconnected");
-        this._clients.Remove(addr.author_addr);
+        _clients.Remove(addr.author_addr);
         return Task.CompletedTask;
     }
 
     private async Task HandleClientConnectedAsync(Message.ClientConnected author, CancellationToken ct)
     {
-        var author_addr = author.client.Client.RemoteEndPoint?.ToString();
+        var authorAddr = author.client.Client.RemoteEndPoint?.ToString();
         var now = DateTime.UtcNow;
         var stream = author.client.GetStream();
 
-        if (author_addr != null && this._banned.Remove(author_addr, out DateTime banned_at))
+        if (authorAddr != null && _banned.Remove(authorAddr, out DateTime bannedAt))
         {
-            var diff = now - banned_at;
+            var diff = now - bannedAt;
             if (diff < Global.BAN_LIMIT)
             {
                 var timeLeft = Global.BAN_LIMIT - diff;
-                _logger.Warning($"{author_addr} blocked (Banned for {timeLeft.TotalSeconds:F0}s)");
-                string ban_msg = $"[Server]You are banned MF: {timeLeft.TotalSeconds:F0} secs left\n";
+                _logger.Warning($"{authorAddr} blocked (Banned for {timeLeft.TotalSeconds:F0}s)");
+                string banMsg = $"[Server]You are banned MF: {timeLeft.TotalSeconds:F0} secs left\n";
 
                 try
                 {
-                    await stream.WriteAsync(Encoding.UTF8.GetBytes(ban_msg), ct);
-                    this._banned.Add(author_addr, now);
+                    await stream.WriteAsync(Encoding.UTF8.GetBytes(banMsg), ct);
+                    _banned.Add(authorAddr, now);
                 }
-                catch { }
+                catch
+                {
+                    _logger.Warning($"could not send ban message to {authorAddr}");
+                }
                 finally
                 {
                     author.client.Close();
@@ -213,7 +219,7 @@ public class MessageHandler {
             }
         }
 
-        _logger.Info($"Client {author_addr} connected");
-        if (author_addr != null) this._clients[author_addr] = new Client(author.client, DateTime.MinValue, 0, false);
+        _logger.Info($"Client {authorAddr} connected");
+        if (authorAddr != null) _clients[authorAddr] = new Client(author.client, DateTime.MinValue, 0, false);
     }
 }

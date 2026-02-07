@@ -2,17 +2,16 @@
 
 namespace csat;
 
-public class AdminCommandHandler
-{
+public class AdminCommandHandler {
     private readonly Dictionary<string, Client> _clients;
     private readonly Dictionary<string, DateTime> _banned;
 
     public AdminCommandHandler(Dictionary<string, Client> clients, Dictionary<string, DateTime> banned)
     {
-        this._clients = clients;
-        this._banned = banned;
+        _clients = clients;
+        _banned = banned;
     }
-    
+
     public async Task HandleCommandAsync(Message.AdminCommand msg, CancellationToken ct)
     {
         switch (msg.command)
@@ -60,21 +59,21 @@ public class AdminCommandHandler
     private async Task HandleShutdownCommandAsync(CancellationToken ct)
     {
         var shutData = Encoding.UTF8.GetBytes($"[Server]Shutting down\n");
-        foreach (var c in this._clients.Values.Where(x => x.authenticated))
-            await c.conn.GetStream().WriteAsync(shutData, ct);
+        foreach (var c in _clients.Values.Where(x => x.Authenticated))
+            await c.Conn.GetStream().WriteAsync(shutData, ct);
         Environment.Exit(0);
     }
 
     private Task HandleUserCommandAsync()
     {
-        if (this._clients.Count == 0)
+        if (_clients.Count == 0)
         {
             Console.WriteLine("No clients found");
             return Task.CompletedTask;
         }
 
-        foreach (var client in this._clients.Values.Where(c => c.authenticated && c.Username != null))
-            Console.WriteLine($"- {client.Username} ({client.conn.Client.RemoteEndPoint!.ToString()})");
+        foreach (var client in _clients.Values.Where(c => c.Authenticated && c.Username != null))
+            Console.WriteLine($"- {client.Username} ({client.Conn.Client.RemoteEndPoint!})");
 
         return Task.CompletedTask;
     }
@@ -84,20 +83,18 @@ public class AdminCommandHandler
         if (args.Length == 0) Console.WriteLine("Usage: /kick <client(s)>");
         foreach (var name in args)
         {
-            var target = this._clients.FirstOrDefault(c => c.Value.Username == name);
+            var target = _clients.FirstOrDefault(c => c.Value.Username == name);
             if (target.Value != null)
             {
                 var data = Encoding.UTF8.GetBytes($"[Server]Admin kicked you!\n");
                 try
                 {
-                    await target.Value.conn.GetStream().WriteAsync(data, ct);
+                    await target.Value.Conn.GetStream().WriteAsync(data, ct);
                 }
-                catch
-                {
-                }
+                catch { }
 
-                target.Value.conn.Close();
-                this._clients.Remove(target.Key);
+                target.Value.Conn.Close();
+                _clients.Remove(target.Key);
                 Console.WriteLine($"INFO: Kicked {name} ({target.Key})");
             }
             else Console.WriteLine($"Error: could not find client '{name}'");
@@ -109,27 +106,25 @@ public class AdminCommandHandler
         if (args.Length == 0) Console.WriteLine("Usage: /broadcast <msg>");
         var bText = string.Join(" ", args);
         var bData = Encoding.UTF8.GetBytes($"[Server]{bText}\n");
-        foreach (var c in this._clients.Values.Where(x => x.authenticated))
-            await c.conn.GetStream().WriteAsync(bData, ct);
+        foreach (var c in _clients.Values.Where(x => x.Authenticated))
+            await c.Conn.GetStream().WriteAsync(bData, ct);
     }
 
     private async Task HandleKickAllCommand(CancellationToken ct)
     {
-        foreach (var client in this._clients.Values.ToList())
+        foreach (var client in _clients.Values.ToList())
         {
             var data = Encoding.UTF8.GetBytes($"[Server]Admin kicked you! (and everybody else)\n");
             try
             {
-                await client.conn.GetStream().WriteAsync(data, ct);
+                await client.Conn.GetStream().WriteAsync(data, ct);
             }
-            catch
-            {
-            }
+            catch { }
 
-            client.conn.Close();
+            client.Conn.Close();
         }
 
-        this._clients.Clear();
+        _clients.Clear();
         Console.WriteLine("Successfully kicked all clients");
     }
 
@@ -141,7 +136,7 @@ public class AdminCommandHandler
             return;
         }
 
-        var target = this._clients.Values.FirstOrDefault(x => x.Username == args[0]);
+        var target = _clients.Values.FirstOrDefault(x => x.Username == args[0]);
         if (target == null)
         {
             Console.WriteLine($"Error: Client '{args[0]}' does not exist");
@@ -153,11 +148,9 @@ public class AdminCommandHandler
 
         try
         {
-            await target.conn.GetStream().WriteAsync(mData, ct);
+            await target.Conn.GetStream().WriteAsync(mData, ct);
         }
-        catch
-        {
-        }
+        catch { }
     }
 
     private async Task HandleBanCommand(string[] args, CancellationToken ct)
@@ -176,7 +169,7 @@ public class AdminCommandHandler
             return;
         }
 
-        var addr = target.conn.Client.RemoteEndPoint?.ToString();
+        var addr = target.Conn.Client.RemoteEndPoint?.ToString();
         if (addr == null)
         {
             Console.WriteLine("Error: Could not get client address");
@@ -188,18 +181,17 @@ public class AdminCommandHandler
 
         try
         {
-            await target.conn.GetStream().WriteAsync(banMsg, ct);
+            await target.Conn.GetStream().WriteAsync(banMsg, ct);
         }
         catch { }
 
         _banned[addr] = DateTime.UtcNow;
         _clients.Remove(addr);
-        target.conn.Close();
+        target.Conn.Close();
 
         Console.WriteLine($"INFO: Banned {args[0]} ({addr}). Reason: {reason}");
-
     }
-    
+
     private void HandleHelp()
     {
         Console.WriteLine("Available commands:\n" +
@@ -209,6 +201,6 @@ public class AdminCommandHandler
                           "  /kickall             Kicks all clients from the server\n" +
                           "  /broadcast <msg>     Send a message to all clients\n" +
                           "  /msg <client> <msg>  Send a message to a specified client\n" +
-                          "  /help /h             Show this help message");
+                          "  /help /h             Print this help message");
     }
 }

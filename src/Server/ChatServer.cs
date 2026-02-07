@@ -12,9 +12,9 @@ public class ChatServer
     private readonly int _port;
     private readonly string _token;
     private TcpListener? _listener;
-    private Channel<Message> _messageChannel;
-    private MessageHandler _messageHandler;
-    private CancellationTokenSource _cts;
+    private readonly Channel<Message> _messageChannel;
+    private readonly MessageHandler _messageHandler;
+    private readonly CancellationTokenSource _cts;
     private readonly ILogger _logger;
 
     public ChatServer(string address, int port, ILogger logger)
@@ -23,22 +23,22 @@ public class ChatServer
         _port = port;
         _token = GenerateToken();
         _messageChannel = Channel.CreateUnbounded<Message>();
-        _messageHandler = new MessageHandler(this._token, logger);
+        _messageHandler = new MessageHandler(_token, logger);
         _cts = new CancellationTokenSource();
         _logger = logger;
     }
 
     public async Task StartAsync()
     {
-        _logger.Info($"Token: {this._token}");
+        _logger.Info($"Token: {_token}");
 
-        this._listener = new TcpListener(IPAddress.Parse(Global.ADDRESS), Global.PORT);
-        this._listener.Start();
+        _listener = new TcpListener(IPAddress.Parse(Global.ADDRESS), Global.PORT);
+        _listener.Start();
         _logger.Info($"Listening on {Global.ADDRESS}:{Global.PORT}...");
 
-        var messageProcessingTask = ProcessMessagesAsync(this._cts.Token);
-        var consoleListenerTask = RunConsoleListenerAsync(this._cts.Token);
-        var clientAcceptTask = AcceptClientsAsync(this._cts.Token);
+        var messageProcessingTask = ProcessMessagesAsync(_cts.Token);
+        var consoleListenerTask = RunConsoleListenerAsync(_cts.Token);
+        var clientAcceptTask = AcceptClientsAsync(_cts.Token);
 
         await Task.WhenAll(messageProcessingTask, consoleListenerTask, clientAcceptTask);
     }
@@ -69,7 +69,7 @@ public class ChatServer
         {
             try
             {
-                TcpClient client = await this._listener?.AcceptTcpClientAsync()!;
+                TcpClient client = await _listener?.AcceptTcpClientAsync()!;
                 _ = HandleClientAsync(client, ct);
             }
             catch (OperationCanceledException)
@@ -81,8 +81,8 @@ public class ChatServer
 
     private async Task HandleClientAsync(TcpClient client, CancellationToken ct)
     {
-        var author_addr = client.Client.RemoteEndPoint?.ToString();
-        if (author_addr == null)
+        var authorAddr = client.Client.RemoteEndPoint?.ToString();
+        if (authorAddr == null)
         {
             _logger.Error("could not resolve client address");
             return;
@@ -100,26 +100,25 @@ public class ChatServer
                 var n = await stream.ReadAsync(buff, ct);
                 if (n > 0)
                 {
-                    var received = Encoding.UTF8.GetString(buff, 0, n);
-                    await _messageChannel.Writer.WriteAsync(new Message.NewMessage(author_addr, buff[..n]), ct);
+                    await _messageChannel.Writer.WriteAsync(new Message.NewMessage(authorAddr, buff[..n]), ct);
                 }
                 else
                 {
-                    await _messageChannel.Writer.WriteAsync(new Message.ClientDisconnected(author_addr), ct);
+                    await _messageChannel.Writer.WriteAsync(new Message.ClientDisconnected(authorAddr), ct);
                     break;
                 }
             }
             catch (OperationCanceledException)
             {
-                _logger.Info($"Read operation for {author_addr} canceled.");
+                _logger.Info($"Read operation for {authorAddr} canceled.");
                 break;
             }
             catch (IOException)
             {
                 if (!client.Connected)
-                    _logger.Info($"Connection for {author_addr} closed by server.");
+                    _logger.Info($"Connection for {authorAddr} closed by server.");
                 else
-                    _logger.Error($"Connection lost for {author_addr}");
+                    _logger.Error($"Connection lost for {authorAddr}");
             }
             catch (Exception ex)
             {
@@ -133,8 +132,8 @@ public class ChatServer
 
     public void Stop()
     {
-        this._cts.Cancel();
-        this._listener?.Stop();
+        _cts.Cancel();
+        _listener?.Stop();
     }
 
     private string GenerateToken()
