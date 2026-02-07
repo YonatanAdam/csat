@@ -96,6 +96,7 @@ public partial class MainWindow : Window
 
                 await Dispatcher.BeginInvoke(() =>
                 {
+                    history.Clear();
                     history.Add(new Message("Connected to server", "System"));
                     ConnectionLight.Fill = Brushes.Orange;
                 });
