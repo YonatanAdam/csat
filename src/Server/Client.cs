@@ -12,10 +12,10 @@ public class Client
     public bool authenticated;
     public string? Username;
 
-    public Client(TcpClient other, DateTime last_messsage, int strike_count, bool authed, string username = "Unknown")
+    public Client(TcpClient other, DateTime last_message, int strike_count, bool authed, string username = "Unknown")
     {
         this.conn = other;
-        this.last_message = last_messsage;
+        this.last_message = last_message;
         this.strike_count = strike_count;
         this.authenticated = authed;
         this.Username = username;
