@@ -1,15 +1,20 @@
 ﻿using System.Text;
+using Utils;
 
 namespace csat;
 
 public class AdminCommandHandler {
     private readonly Dictionary<string, Client> _clients;
     private readonly Dictionary<string, DateTime> _banned;
+    private readonly ILogger _logger;
+    private readonly string _token;
 
-    public AdminCommandHandler(Dictionary<string, Client> clients, Dictionary<string, DateTime> banned)
+    public AdminCommandHandler(Dictionary<string, Client> clients, Dictionary<string, DateTime> banned, string token, ILogger logger)
     {
         _clients = clients;
         _banned = banned;
+        _logger = logger;
+        _token = token;
     }
 
     public async Task HandleCommandAsync(Message.AdminCommand msg, CancellationToken ct)
@@ -45,7 +50,11 @@ public class AdminCommandHandler {
                 await HandleBanCommand(msg.args, ct);
                 break;
             }
-
+            case "token":
+            {
+                await HandleTokenCommand(ct);
+                break;
+            }
             case "help" or "h":
                 HandleHelp();
                 break;
@@ -64,11 +73,16 @@ public class AdminCommandHandler {
         Environment.Exit(0);
     }
 
+    private async Task HandleTokenCommand(CancellationToken ct)
+    {
+        _logger.Info($"Token: {_token}");
+    }
+
     private Task HandleUserCommandAsync()
     {
         if (_clients.Count == 0)
         {
-            Console.WriteLine("No clients found");
+            _logger.Info("No clients found");
             return Task.CompletedTask;
         }
 
@@ -91,13 +105,16 @@ public class AdminCommandHandler {
                 {
                     await target.Value.Conn.GetStream().WriteAsync(data, ct);
                 }
-                catch { }
+                catch
+                {
+                    _logger.Warning($"could not send kick message to {target.Value.Conn.Client.RemoteEndPoint}");
+                }
 
                 target.Value.Conn.Close();
                 _clients.Remove(target.Key);
-                Console.WriteLine($"INFO: Kicked {name} ({target.Key})");
+                _logger.Info($"Kicked {name} ({target.Key})");
             }
-            else Console.WriteLine($"Error: could not find client '{name}'");
+            else _logger.Warning($"could not find client '{name}'");
         }
     }
 
@@ -119,13 +136,16 @@ public class AdminCommandHandler {
             {
                 await client.Conn.GetStream().WriteAsync(data, ct);
             }
-            catch { }
+            catch
+            {
+                _logger.Warning($"could not send kick message to {client.Conn.Client.RemoteEndPoint}");
+            }
 
             client.Conn.Close();
         }
 
         _clients.Clear();
-        Console.WriteLine("Successfully kicked all clients");
+        _logger.Info("Successfully kicked all clients");
     }
 
     private async Task HandleMessageCommandAsync(string[] args, CancellationToken ct)
@@ -139,7 +159,7 @@ public class AdminCommandHandler {
         var target = _clients.Values.FirstOrDefault(x => x.Username == args[0]);
         if (target == null)
         {
-            Console.WriteLine($"Error: Client '{args[0]}' does not exist");
+            _logger.Warning($"Client '{args[0]}' does not exist");
             return;
         }
 
@@ -150,7 +170,10 @@ public class AdminCommandHandler {
         {
             await target.Conn.GetStream().WriteAsync(mData, ct);
         }
-        catch { }
+        catch
+        {
+            _logger.Warning($"could not send message to {target.Conn.Client.RemoteEndPoint}");
+        }
     }
 
     private async Task HandleBanCommand(string[] args, CancellationToken ct)
@@ -165,14 +188,14 @@ public class AdminCommandHandler {
 
         if (target == null)
         {
-            Console.WriteLine($"Error: Client '{args[0]}' does not exist");
+            _logger.Error($"Client '{args[0]}' does not exist");
             return;
         }
 
         var addr = target.Conn.Client.RemoteEndPoint?.ToString();
         if (addr == null)
         {
-            Console.WriteLine("Error: Could not get client address");
+            _logger.Error("Could not get client address");
             return;
         }
 
@@ -183,13 +206,16 @@ public class AdminCommandHandler {
         {
             await target.Conn.GetStream().WriteAsync(banMsg, ct);
         }
-        catch { }
+        catch
+        {
+            _logger.Warning($"could not send ban message to {target.Conn.Client.RemoteEndPoint}");
+        }
 
         _banned[addr] = DateTime.UtcNow;
         _clients.Remove(addr);
         target.Conn.Close();
 
-        Console.WriteLine($"INFO: Banned {args[0]} ({addr}). Reason: {reason}");
+        _logger.Info($"Banned {args[0]} ({addr}). Reason: {reason}");
     }
 
     private void HandleHelp()

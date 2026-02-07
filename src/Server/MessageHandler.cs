@@ -16,7 +16,7 @@ public class MessageHandler {
         _token = token;
         _clients = new Dictionary<string, Client>();
         _banned = new Dictionary<string, DateTime>();
-        _adminCommandHandler = new AdminCommandHandler(_clients, _banned);
+        _adminCommandHandler = new AdminCommandHandler(_clients, _banned, token, logger);
         _logger = logger;
     }
 
