@@ -4,8 +4,7 @@ using Utils;
 
 namespace csat;
 
-public class MessageHandler
-{
+public class MessageHandler {
     private readonly Dictionary<string, Client> _clients;
     private readonly Dictionary<string, DateTime> _banned;
     private readonly string _token;
@@ -39,10 +38,11 @@ public class MessageHandler
                 break;
         }
     }
-    
+
     private async Task HandleNewMessageAsync(Message.NewMessage msg, CancellationToken ct)
     {
         var text = Encoding.UTF8.GetString(msg.Data);
+    
         if (!this._clients.TryGetValue(msg.author_addr!, out var client))
             return;
 
@@ -93,9 +93,7 @@ public class MessageHandler
                 {
                     await client.conn.GetStream().WriteAsync(chatMsg, ct);
                 }
-                catch
-                {
-                }
+                catch { }
             }
         }
     }
@@ -106,11 +104,11 @@ public class MessageHandler
 
         if (username.Length == 0 || username.Length > Global.MAX_USERNAME_LENGTH)
         {
-            await stream.WriteAsync(Encoding.UTF8.GetBytes("Invalid length. Try again: "), ct);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("[Server]Invalid length. Try again: "), ct);
         }
         else if (_clients.Values.Any(c => c.Username == username))
         {
-            await stream.WriteAsync(Encoding.UTF8.GetBytes("Taken. Try again: "), ct);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("[Server]Taken. Try again: "), ct);
         }
         else
         {
@@ -123,14 +121,17 @@ public class MessageHandler
     private async Task HandleAuthenticationAsync(string addr, Client client, string text, NetworkStream stream,
         CancellationToken ct)
     {
-        if (text.TrimEnd() == _token)
+        var receivedToken = text.Trim();
+        if (receivedToken == _token)
         {
             client.authenticated = true;
             _logger.Info($"{client.conn.Client.RemoteEndPoint} is now authenticated");
-            await stream.WriteAsync(Encoding.UTF8.GetBytes("Authenticated! Enter username: "), ct);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("[Server]Authenticated! Enter username: "), ct);
         }
         else
         {
+            _logger.Warning($"Auth failed for {addr}: token mismatch.");
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("[Server]Incorrect token, disconnecting."), ct);
             client.conn.Close();
             _clients.Remove(addr);
         }
@@ -187,6 +188,7 @@ public class MessageHandler
         var author_addr = author.client.Client.RemoteEndPoint?.ToString();
         var now = DateTime.UtcNow;
         var stream = author.client.GetStream();
+
         if (author_addr != null && this._banned.Remove(author_addr, out DateTime banned_at))
         {
             var diff = now - banned_at;
@@ -194,16 +196,14 @@ public class MessageHandler
             {
                 var timeLeft = Global.BAN_LIMIT - diff;
                 _logger.Warning($"{author_addr} blocked (Banned for {timeLeft.TotalSeconds:F0}s)");
-                string ban_msg = $"You are banned MF: {timeLeft.TotalSeconds:F0} secs left\n";
+                string ban_msg = $"[Server]You are banned MF: {timeLeft.TotalSeconds:F0} secs left\n";
 
                 try
                 {
                     await stream.WriteAsync(Encoding.UTF8.GetBytes(ban_msg), ct);
                     this._banned.Add(author_addr, now);
                 }
-                catch
-                {
-                }
+                catch { }
                 finally
                 {
                     author.client.Close();
@@ -214,13 +214,6 @@ public class MessageHandler
         }
 
         _logger.Info($"Client {author_addr} connected");
-        if (author_addr != null) this._clients[author_addr] = new Client(author.client, now, 0, false);
-        try
-        {
-            await stream.WriteAsync(Encoding.UTF8.GetBytes("[Server]Enter auth token: "), ct);
-        }
-        catch
-        {
-        }
+        if (author_addr != null) this._clients[author_addr] = new Client(author.client, DateTime.MinValue, 0, false);
     }
 }

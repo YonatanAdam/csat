@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading.Channels;
 using Utils;
 
@@ -89,6 +90,7 @@ public class ChatServer
 
         var stream = client.GetStream();
         await _messageChannel.Writer.WriteAsync(new Message.ClientConnected(client), ct);
+
         Byte[] buff = new Byte[64];
 
         while (!ct.IsCancellationRequested && client.Connected)
@@ -98,6 +100,7 @@ public class ChatServer
                 var n = await stream.ReadAsync(buff, ct);
                 if (n > 0)
                 {
+                    var received = Encoding.UTF8.GetString(buff, 0, n);
                     await _messageChannel.Writer.WriteAsync(new Message.NewMessage(author_addr, buff[..n]), ct);
                 }
                 else

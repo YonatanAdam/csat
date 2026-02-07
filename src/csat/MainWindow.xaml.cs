@@ -81,7 +81,7 @@ public partial class MainWindow : Window
 
     }
 
-    private void Connect(string ip)
+    private void Connect(string ip, string token)
     {
         _ = Task.Run(async () =>
         {
@@ -97,9 +97,11 @@ public partial class MainWindow : Window
                 await Dispatcher.BeginInvoke(() =>
                 {
                     history.Clear();
-                    history.Add(new Message("Connected to server", "System"));
                     ConnectionLight.Fill = Brushes.Orange;
                 });
+
+                var tokenBytes = Encoding.UTF8.GetBytes(token + "\n");
+                await activeStream.WriteAsync(tokenBytes);
 
                 var buffer = new byte[1024];
                 while (client.Connected && isConnected)
@@ -117,7 +119,7 @@ public partial class MainWindow : Window
 
                     var receivedText = Encoding.UTF8.GetString(buffer, 0, n).TrimEnd();
 
-                    await Dispatcher.BeginInvoke(() => // parse message
+                    await Dispatcher.BeginInvoke(() => 
                     {
                         string username = "Server";
                         string content = receivedText;
@@ -230,10 +232,14 @@ public partial class MainWindow : Window
                 if (args.Length < 1)
                 {
                     history.Add(new Message("error: ip address not provided\nUsage: /connect <ip>", "System"));
+                } else if (args.Length < 2)
+                {
+                    
+                    history.Add(new Message("error: authenticaiton token not provided\nUsage: /connect <ip> <token>", "System"));
                 }
                 else
                 {
-                    Connect(args[0]);
+                    Connect(args[0], args[1]);
                 }
                 break;
 
