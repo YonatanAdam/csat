@@ -40,10 +40,8 @@ public partial class MainWindow : Window
 
     private void WelcomeMessage()
     {
-        string msg = "Welcome!\n" +
-                     "Try:  /connect <ip>        Connect to a server\n" +
-                     "or   /help /h               to see all commands";
-        history.Add(new Message(msg, "Server"));
+        string msg = "You are offline. Use /connect <ip> to connect to a server";
+        history.Add(new Message(msg, "System"));
     }
 
     private async void SendButton_OnClick(object sender, RoutedEventArgs e)
@@ -89,7 +87,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                await Dispatcher.BeginInvoke(() => history.Add(new Message("Connecting to server...", "Server")));
+                await Dispatcher.BeginInvoke(() => history.Add(new Message("Connecting to server...", "System")));
 
                 client = new TcpClient();
                 await client.ConnectAsync(ip, Port);
@@ -98,7 +96,7 @@ public partial class MainWindow : Window
 
                 await Dispatcher.BeginInvoke(() =>
                 {
-                    history.Add(new Message("Connected to server", "Server"));
+                    history.Add(new Message("Connected to server", "System"));
                     ConnectionLight.Fill = Brushes.Orange;
                 });
 
@@ -143,14 +141,14 @@ public partial class MainWindow : Window
             }
             catch (Exception e)
             {
-                await Dispatcher.BeginInvoke(() => history.Add(new Message($"Failed connecting to server: {e.Message}", "Server")));
+                await Dispatcher.BeginInvoke(() => history.Add(new Message($"Failed connecting to server: {e.Message}", "System")));
             }
             finally
             {
                 isConnected = false;
                 activeStream?.Dispose();
                 client?.Dispose();
-                await Dispatcher.BeginInvoke(() => history.Add(new Message("Disconnected from server", "Server")));
+                await Dispatcher.BeginInvoke(() => history.Add(new Message("Disconnected from server", "System")));
                 await Dispatcher.BeginInvoke(() => ConnectionLight.Fill = Brushes.Red);
             }
         });
@@ -230,7 +228,7 @@ public partial class MainWindow : Window
             case "connect":
                 if (args.Length < 1)
                 {
-                    history.Add(new Message("error: ip address not provided\nUsage: /connect <ip>", "Server"));
+                    history.Add(new Message("error: ip address not provided\nUsage: /connect <ip>", "System"));
                 }
                 else
                 {
@@ -264,7 +262,7 @@ public partial class MainWindow : Window
                 break;
 
             default:
-                history.Add(new Message($"error: unknown command '{command}'\nType /help for info.", "Server"));
+                history.Add(new Message($"error: unknown command '{command}'\nType /help for info.", "System"));
                 break;
         }
     }
@@ -285,7 +283,7 @@ public partial class MainWindow : Window
                           "  /exit                Exits the application\n" +
                           "  /help /h             Show this help message";
 
-        history.Add(new Message(helpText, "Server"));
+        history.Add(new Message(helpText, "System"));
     }
 
 
